@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Unconfirmed stories with the AI's odds, and how earlier rumours turned out.
-struct RumoursView: View {
+/// Rumours, as a section of News: unconfirmed stories with the AI's odds, and how earlier rumours
+/// turned out.
+struct RumoursSection: View {
     @EnvironmentObject private var store: NewsStore
-    @Binding var showSettings: Bool
     @State private var status: RumourStatus = .rumour
     @AppStorage("rumours.sort") private var sortRaw = RumourSort.latest.rawValue
 
@@ -11,49 +11,54 @@ struct RumoursView: View {
 
     var body: some View {
         let list = store.rumours(status, sort: sort)
-        NavigationStack {
-            ScoutPage(showSettings: $showSettings, title: "Rumours", subtitle: subtitle(list.count), pinnedHeight: 50,
-                      onRefresh: { await store.refresh() }, isRefreshing: store.isLoading) {
-                HStack(spacing: 0) {
-                    CapsuleSwitcher(items: RumourStatus.allCases, selection: $status, title: \.title)
-                    Menu {
-                        Picker("Sort", selection: $sortRaw) {
-                            ForEach(RumourSort.allCases) { Text($0.title).tag($0.rawValue) }
+        VStack(spacing: 14) {
+            HStack(spacing: 8) {
+                HStack(spacing: 2) {
+                    ForEach(RumourStatus.allCases) { s in
+                        Button {
+                            withAnimation(.snappy) { status = s }
+                        } label: {
+                            Text(s.title)
+                                .font(.system(size: 13, weight: .bold))
+                                .frame(maxWidth: .infinity).frame(height: 30)
+                                .background(status == s ? Theme.ink : Color.clear, in: Capsule())
+                                .foregroundStyle(status == s ? Theme.background : Theme.secondary)
                         }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
-                            .font(.system(size: 14, weight: .semibold))
-                            .frame(width: 34, height: 34)
-                            .background(Theme.card, in: Circle())
-                            .foregroundStyle(Theme.ink)
+                        .buttonStyle(.plain)
                     }
-                    .accessibilityLabel("Sort, \(sort.title)")
-                    .padding(.trailing, 20)
                 }
-                .frame(height: 46)
-                .padding(.bottom, 4)
-            } content: {
-                if list.isEmpty {
-                    empty
-                } else {
-                    let seq = list.prefix(80).map(\.id)
-                    ForEach(list.prefix(80)) { s in
-                        NavigationLink(value: StoryRoute(id: s.id, sequence: seq)) { RumourCard(story: s) }
-                            .buttonStyle(PressStyle())
+                .padding(3)
+                .background(Theme.track, in: Capsule())
+                Menu {
+                    Picker("Sort", selection: $sortRaw) {
+                        ForEach(RumourSort.allCases) { Text($0.title).tag($0.rawValue) }
                     }
-                    Text("Odds are the AI's view from how many outlets report it, who the sources are and what the companies say. They can be wrong.")
-                        .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
-                        .multilineTextAlignment(.center).padding(.horizontal, 24)
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(width: 36, height: 36)
+                        .background(Theme.card, in: Circle())
+                        .foregroundStyle(Theme.ink)
                 }
+                .accessibilityLabel("Sort, \(sort.title)")
             }
-            .storyDestinations()
-            .sensoryFeedback(.selection, trigger: sortRaw)
+            SectionHead(title: status == .rumour ? "Rumours" : status.title,
+                        detail: "\(list.count) · \(sort.title.lowercased())")
+            if list.isEmpty {
+                empty
+            } else {
+                let seq = list.prefix(80).map(\.id)
+                ForEach(list.prefix(80)) { s in
+                    NavigationLink(value: StoryRoute(id: s.id, sequence: seq)) { RumourCard(story: s) }
+                        .buttonStyle(PressStyle())
+                }
+                Text("Odds are the AI's view from how many outlets report it, who the sources are and what the companies say. They can be wrong.")
+                    .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
+                    .multilineTextAlignment(.center).padding(.horizontal, 24)
+            }
         }
-    }
-
-    private func subtitle(_ count: Int) -> String {
-        let word = status == .rumour ? "open rumour\(count == 1 ? "" : "s")" : status.title.lowercased()
-        return "\(count) \(word) · \(sort.title.lowercased())"
+        .sensoryFeedback(.selection, trigger: sortRaw)
+        .sensoryFeedback(.selection, trigger: status)
     }
 
     private var empty: some View {

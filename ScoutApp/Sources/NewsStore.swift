@@ -3,7 +3,7 @@ import WidgetKit
 
 /// The sections along the top of News.
 enum NewsSection: String, CaseIterable, Identifiable {
-    case all = "All", tech = "Tech", finance = "Finance", world = "World", fashion = "Fashion"
+    case all = "All", tech = "Tech", finance = "Finance", world = "World", fashion = "Fashion", rumours = "Rumours"
 
     var id: String { rawValue }
     var topic: Topic? { Topic(rawValue: rawValue) }

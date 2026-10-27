@@ -90,35 +90,33 @@ struct RootView: View {
     @State private var showSettings = false
     @State private var showTopics = !Shared.hasChosenTopic
     @State private var tab = 0
-    /// When you last looked at Rumours, for the badge of new ones.
-    @AppStorage("rumours.seen") private var rumoursSeen = Date.now.timeIntervalSince1970
+    @AppStorage("news.section") private var newsSection = NewsSection.all.rawValue
 
     var body: some View {
         TabView(selection: $tab) {
+            // Inside each tab, controls stay in the ink; only the tab bar uses the accent.
             TodayView(showSettings: $showSettings)
+                .tint(Theme.ink)
                 .tabItem { Label("Today", systemImage: "newspaper") }
                 .tag(0)
             NewsView(showSettings: $showSettings)
+                .tint(Theme.ink)
                 .tabItem { Label("News", systemImage: "list.bullet.rectangle.portrait") }
                 .tag(1)
             StocksView(showSettings: $showSettings)
+                .tint(Theme.ink)
                 .tabItem { Label("Stocks", systemImage: "chart.line.uptrend.xyaxis") }
-                .tag(4)
-            RumoursView(showSettings: $showSettings)
-                .tabItem { Label("Rumours", systemImage: "dot.radiowaves.left.and.right") }
-                .badge(tab == 2 ? 0 : newRumours)
                 .tag(2)
             SavedView(showSettings: $showSettings)
+                .tint(Theme.ink)
                 .tabItem { Label("Saved", systemImage: "bookmark") }
                 .tag(3)
         }
         // Colors are read when views draw, so a new look rebuilds the pages (the sheet stays open).
         .id(look.appearance)
-        .tint(Theme.ink)
+        // the tab you're on is highlighted in the accent
+        .tint(Theme.accent)
         .sensoryFeedback(.selection, trigger: tab)
-        .onChange(of: tab) { old, new in
-            if old == 2 || new == 2 { rumoursSeen = Date.now.timeIntervalSince1970 }
-        }
         .task { await store.refreshIfStale() }
         .sheet(isPresented: $showSettings) {
             SettingsView()
@@ -138,16 +136,13 @@ struct RootView: View {
             // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://rumours, scout://saved
             switch url.host {
             case "news": tab = 1
-            case "stocks": tab = 4
-            case "rumours": tab = 2
+            case "stocks": tab = 2
+            case "rumours":
+                newsSection = NewsSection.rumours.rawValue
+                tab = 1
             case "saved": tab = 3
             default: tab = 0
             }
         }
-    }
-
-    private var newRumours: Int {
-        let seen = Date(timeIntervalSince1970: rumoursSeen)
-        return store.stories.filter { $0.isRumour && ($0.firstSeen ?? .distantPast) > seen }.count
     }
 }
