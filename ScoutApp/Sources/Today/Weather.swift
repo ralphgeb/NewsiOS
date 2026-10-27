@@ -12,6 +12,8 @@ final class WeatherModel: NSObject, ObservableObject {
         let temperature: Double
         let code: Int
         let isDay: Bool
+        /// Chance of rain or snow that hour, 0–100.
+        let rainChance: Int
         var id: Date { time }
     }
 
@@ -120,7 +122,8 @@ final class WeatherModel: NSObject, ObservableObject {
             let start = Date.now.addingTimeInterval(-3600)
             let hours = hourly.forecast.filter { $0.date > start }.prefix(25).map {
                 Hour(time: $0.date, temperature: $0.temperature.converted(to: .celsius).value,
-                     code: wmoCode($0.condition), isDay: $0.isDaylight)
+                     code: wmoCode($0.condition), isDay: $0.isDaylight,
+                     rainChance: Int(($0.precipitationChance * 100).rounded()))
             }
             let today = daily.forecast.first
             return Report(place: place, temperature: now.temperature.converted(to: .celsius).value,
@@ -158,7 +161,10 @@ final class WeatherModel: NSObject, ObservableObject {
 
     private struct OpenMeteo: Decodable {
         struct Current: Decodable { let temperature2m: Double; let weatherCode: Int; let isDay: Int }
-        struct Hourly: Decodable { let time: [String]; let temperature2m: [Double?]; let weatherCode: [Int?]; let isDay: [Int?] }
+        struct Hourly: Decodable {
+            let time: [String]; let temperature2m: [Double?]; let weatherCode: [Int?]; let isDay: [Int?]
+            let precipitationProbability: [Int?]?
+        }
         struct Daily: Decodable { let temperature2mMax: [Double?]; let temperature2mMin: [Double?]; let precipitationProbabilityMax: [Int?]? }
         let utcOffsetSeconds: Int
         let current: Current
@@ -172,7 +178,7 @@ final class WeatherModel: NSObject, ObservableObject {
             .init(name: "latitude", value: String(format: "%.3f", spot.coordinate.latitude)),
             .init(name: "longitude", value: String(format: "%.3f", spot.coordinate.longitude)),
             .init(name: "current", value: "temperature_2m,weather_code,is_day"),
-            .init(name: "hourly", value: "temperature_2m,weather_code,is_day"),
+            .init(name: "hourly", value: "temperature_2m,weather_code,is_day,precipitation_probability"),
             .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max"),
             .init(name: "timezone", value: "auto"),
             .init(name: "forecast_days", value: "2"),
@@ -191,7 +197,8 @@ final class WeatherModel: NSObject, ObservableObject {
             guard let t = f.date(from: s), t > start, hours.count < 25,
                   let temp = r.hourly.temperature2m[safe: i] ?? nil else { continue }
             hours.append(Hour(time: t, temperature: temp, code: (r.hourly.weatherCode[safe: i] ?? nil) ?? 3,
-                              isDay: ((r.hourly.isDay[safe: i] ?? nil) ?? 1) == 1))
+                              isDay: ((r.hourly.isDay[safe: i] ?? nil) ?? 1) == 1,
+                              rainChance: (r.hourly.precipitationProbability?[safe: i] ?? nil) ?? 0))
         }
         return Report(place: place, temperature: r.current.temperature2m, code: r.current.weatherCode,
                       isDay: r.current.isDay == 1, high: r.daily.temperature2mMax.first ?? nil,
@@ -298,11 +305,12 @@ struct PolylineShape: Shape {
     }
 }
 
-/// Now, today's high and low, and the next 24 hours as a temperature line with an icon every
-/// four hours. Tap to refresh.
+/// Now, today's high and low, and the next 24 hours: the temperature line with a reading every four
+/// hours, or (tap it) the chance of rain hour by hour. Pull Today down to refresh.
 struct WeatherCard: View {
     @EnvironmentObject private var weather: WeatherModel
     @State private var attribution: URL?
+    @AppStorage("weather.showRain") private var showRain = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -320,8 +328,6 @@ struct WeatherCard: View {
             }
         }
         .scoutCard()
-        .contentShape(Rectangle())
-        .onTapGesture { Task { await weather.refresh(force: true) } }
         .task { await weather.refresh() }
         .task { attribution = try? await WeatherService.shared.attribution.legalPageURL }
     }
@@ -379,7 +385,25 @@ struct WeatherCard: View {
                     }
                 }
             }
-            if r.hours.count > 4 { HoursChart(hours: r.hours) }
+            if r.hours.count > 4 {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(showRain ? rainSummary(r.hours) : tempSummary(r.hours))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.secondary)
+                            .lineLimit(1)
+                        Spacer()
+                        chartSwitch
+                    }
+                    Group {
+                        if showRain { RainChart(hours: r.hours) } else { HoursChart(hours: r.hours) }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(.snappy) { showRain.toggle() } }
+                    .transition(.opacity)
+                }
+                .sensoryFeedback(.selection, trigger: showRain)
+            }
             HStack(spacing: 6) {
                 if weather.isDenied {
                     Text("Location is off, so this is London. Change it in the Settings app.")
@@ -398,45 +422,161 @@ struct WeatherCard: View {
     }
 }
 
-/// The next 24 hours: a smooth temperature line, with an icon, time and temperature every four hours.
+extension WeatherCard {
+    /// Temperature or rain, as a small two-way switch.
+    private var chartSwitch: some View {
+        HStack(spacing: 2) {
+            ForEach([false, true], id: \.self) { rain in
+                Button { withAnimation(.snappy) { showRain = rain } } label: {
+                    Image(systemName: rain ? "drop.fill" : "thermometer.medium")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 32, height: 22)
+                        .background(showRain == rain ? Theme.ink : Color.clear, in: Capsule())
+                        .foregroundStyle(showRain == rain ? Theme.background : Theme.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(rain ? "Chance of rain" : "Temperature")
+            }
+        }
+        .padding(2)
+        .background(Theme.track, in: Capsule())
+    }
+
+    /// "Warmest 15° at 2pm, coolest 8° at 5am"
+    private func tempSummary(_ hours: [WeatherModel.Hour]) -> String {
+        guard let hi = hours.max(by: { $0.temperature < $1.temperature }),
+              let lo = hours.min(by: { $0.temperature < $1.temperature }) else { return "Next 24 hours" }
+        let t = { (h: WeatherModel.Hour) in h.time.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated))) }
+        return "Warmest \(Int(hi.temperature.rounded()))° at \(t(hi)) · coolest \(Int(lo.temperature.rounded()))° at \(t(lo))"
+    }
+
+    /// "Rain most likely at 3pm (60%)", or none expected.
+    private func rainSummary(_ hours: [WeatherModel.Hour]) -> String {
+        guard let top = hours.max(by: { $0.rainChance < $1.rainChance }), top.rainChance >= 15 else {
+            return "No rain expected in the next 24 hours"
+        }
+        return "Rain most likely at \(top.time.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated)))) (\(top.rainChance)%)"
+    }
+}
+
+/// Lines the chart up with the row of columns under it: each four-hour mark sits in the middle of
+/// its column.
+private func columnDomain(_ hours: [WeatherModel.Hour]) -> ClosedRange<Date> {
+    let first = hours.first?.time ?? .now
+    let columns = Double((hours.count + 3) / 4)
+    return first.addingTimeInterval(-2 * 3600)...first.addingTimeInterval((4 * columns - 2) * 3600)
+}
+
+/// Time and icon under each four-hour mark.
+private struct HourColumns<Extra: View>: View {
+    let hours: [WeatherModel.Hour]
+    @ViewBuilder var extra: (WeatherModel.Hour) -> Extra
+
+    var body: some View {
+        let marks = stride(from: 0, to: hours.count, by: 4).map { hours[$0] }
+        HStack(spacing: 0) {
+            ForEach(Array(marks.enumerated()), id: \.offset) { i, h in
+                VStack(spacing: 5) {
+                    Text(i == 0 ? "Now" : h.time.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated))))
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(i == 0 ? Theme.accent : Theme.secondary)
+                    extra(h)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+}
+
+/// The next 24 hours: a smooth temperature line with a faint dot every hour, a bold dot and
+/// reading every four hours, and an icon under each.
 private struct HoursChart: View {
     let hours: [WeatherModel.Hour]
 
     var body: some View {
-        let marks = stride(from: 0, to: hours.count, by: 4).map { hours[$0] }
         let temps = hours.map(\.temperature)
-        let lo = (temps.min() ?? 0) - 1.5, hi = (temps.max() ?? 1) + 1.5
-        VStack(spacing: 8) {
+        let lo = (temps.min() ?? 0) - 2, hi = (temps.max() ?? 1) + 3
+        let marks = Set(stride(from: 0, to: hours.count, by: 4).map { hours[$0].time })
+        VStack(spacing: 6) {
             Chart {
                 ForEach(hours) { h in
                     AreaMark(x: .value("Time", h.time), yStart: .value("Low", lo), yEnd: .value("Temp", h.temperature))
-                        .foregroundStyle(LinearGradient(colors: [Theme.ink.opacity(0.12), Theme.ink.opacity(0)], startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(LinearGradient(colors: [Theme.ink.opacity(0.14), Theme.ink.opacity(0)], startPoint: .top, endPoint: .bottom))
                         .interpolationMethod(.catmullRom)
                     LineMark(x: .value("Time", h.time), y: .value("Temp", h.temperature))
                         .foregroundStyle(Theme.ink)
                         .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                         .interpolationMethod(.catmullRom)
                 }
-                if let first = hours.first {
-                    PointMark(x: .value("Time", first.time), y: .value("Temp", first.temperature))
-                        .foregroundStyle(Theme.accent).symbolSize(40)
+                ForEach(hours) { h in
+                    let isMark = marks.contains(h.time)
+                    let isNow = h.time == hours.first?.time
+                    PointMark(x: .value("Time", h.time), y: .value("Temp", h.temperature))
+                        .foregroundStyle(isNow ? Theme.accent : Theme.ink.opacity(isMark ? 1 : 0.25))
+                        .symbolSize(isNow ? 55 : (isMark ? 30 : 8))
+                        .annotation(position: .top, spacing: 3) {
+                            if isMark {
+                                Text("\(Int(h.temperature.rounded()))°")
+                                    .font(Theme.number(12, weight: .bold))
+                                    .foregroundStyle(isNow ? Theme.accent : Theme.ink)
+                            }
+                        }
                 }
             }
+            .chartXScale(domain: columnDomain(hours))
             .chartYScale(domain: lo...hi)
             .chartXAxis(.hidden)
             .chartYAxis(.hidden)
-            .frame(height: 46)
-            HStack(spacing: 0) {
-                ForEach(Array(marks.enumerated()), id: \.offset) { i, h in
-                    VStack(spacing: 5) {
-                        Text(i == 0 ? "Now" : h.time.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated))))
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(i == 0 ? Theme.accent : Theme.secondary)
-                        WeatherIcon(name: WeatherCode.icon(h.code, day: h.isDay), size: 24, color: Theme.ink.opacity(0.85))
-                        Text("\(Int(h.temperature.rounded()))°").font(Theme.number(14)).foregroundStyle(Theme.ink)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
+            .frame(height: 76)
+            HourColumns(hours: hours) { h in
+                WeatherIcon(name: WeatherCode.icon(h.code, day: h.isDay), size: 24, color: Theme.ink.opacity(0.85))
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(hours.enumerated().filter { $0.offset % 4 == 0 }
+            .map { "\($0.element.time.formatted(date: .omitted, time: .shortened)) \(Int($0.element.temperature.rounded())) degrees" }
+            .joined(separator: ", "))
+    }
+}
+
+/// The chance of rain hour by hour, as bars that grow darker as rain gets likelier.
+private struct RainChart: View {
+    let hours: [WeatherModel.Hour]
+
+    var body: some View {
+        let marks = Set(stride(from: 0, to: hours.count, by: 4).map { hours[$0].time })
+        VStack(spacing: 6) {
+            Chart {
+                RuleMark(y: .value("Half", 50))
+                    .foregroundStyle(Theme.ink.opacity(0.12))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                ForEach(hours) { h in
+                    BarMark(x: .value("Time", h.time, unit: .hour), y: .value("Chance", max(h.rainChance, 2)), width: .ratio(0.62))
+                        .foregroundStyle(h.rainChance >= 50 ? Theme.accent : Theme.ink.opacity(0.18 + 0.5 * Double(h.rainChance) / 100))
+                        .cornerRadius(3)
+                        .annotation(position: .top, spacing: 2) {
+                            if marks.contains(h.time) {
+                                Text("\(h.rainChance)%")
+                                    .font(Theme.number(11, weight: .bold))
+                                    .foregroundStyle(h.rainChance >= 50 ? Theme.accent : Theme.secondary)
+                            }
+                        }
+                }
+            }
+            .chartXScale(domain: columnDomain(hours))
+            .chartYScale(domain: 0...115)
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .frame(height: 76)
+            HourColumns(hours: hours) { h in
+                Image(systemName: h.rainChance >= 50 ? "drop.fill" : "drop")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(h.rainChance >= 50 ? Theme.accent : Theme.ink.opacity(0.35 + 0.5 * Double(h.rainChance) / 100))
+                    .frame(height: 24)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(hours.enumerated().filter { $0.offset % 4 == 0 }
+            .map { "\($0.element.time.formatted(date: .omitted, time: .shortened)) \($0.element.rainChance) percent chance of rain" }
+            .joined(separator: ", "))
     }
 }

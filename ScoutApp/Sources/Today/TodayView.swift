@@ -2,6 +2,8 @@ import SwiftUI
 
 struct TodayView: View {
     @EnvironmentObject private var store: NewsStore
+    @EnvironmentObject private var weather: WeatherModel
+    @EnvironmentObject private var tube: TubeService
     @Binding var showSettings: Bool
     @State private var path = NavigationPath()
     @State private var editionID: String?
@@ -21,7 +23,12 @@ struct TodayView: View {
         let page = store.frontPage(edition: editionID)
         NavigationStack(path: $path) {
             ScoutPage(showSettings: $showSettings, title: "Today", subtitle: subtitle, editing: $editing,
-                      onRefresh: { await store.refresh() }, isRefreshing: store.isLoading) {
+                      onRefresh: {
+                          async let news: Void = store.refresh()
+                          async let sky: Void = weather.refresh(force: true)
+                          async let trains: Void = tube.refresh(force: true)
+                          _ = await (news, sky, trains)
+                      }, isRefreshing: store.isLoading) {
                 if let page {
                     ForEach(visible(page)) { card in
                         editableCard(card, page: page)

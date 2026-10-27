@@ -89,32 +89,50 @@ struct TubeCard: View {
     var body: some View {
         let bad = tube.lines.filter { $0.level > 0 }
         let good = tube.lines.filter { $0.level == 0 }
-        VStack(alignment: .leading, spacing: compact ? 0 : 12) {
+        VStack(alignment: .leading, spacing: 12) {
             Button {
                 withAnimation(.snappy) { compact.toggle() }
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "tram.fill").font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.ink)
-                    Text("Tube").font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.ink)
-                    if compact || tube.lines.isEmpty {
-                        Text(summary(bad))
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(bad.contains { $0.level == 2 } ? Theme.accent : Theme.secondary)
-                            .lineLimit(1)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "tram.fill").font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                        Text("Tube").font(.system(size: 16, weight: .heavy)).foregroundStyle(Theme.ink)
+                        Spacer(minLength: 4)
+                        if tube.isLoading {
+                            ProgressView().controlSize(.mini)
+                        } else if let f = tube.fetched {
+                            Text(Format.time(f)).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
+                        }
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.tertiary)
+                            .rotationEffect(.degrees(compact ? 0 : 180))
                     }
-                    Spacer(minLength: 4)
+                    // folded: the second line says what's wrong, line by line
                     if compact {
-                        lineStrip.frame(width: 64)
-                    } else if tube.isLoading {
-                        ProgressView().controlSize(.mini)
-                    } else if let f = tube.fetched {
-                        Text(Format.time(f)).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
+                        if tube.lines.isEmpty {
+                            Text(summary(bad)).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
+                        } else if bad.isEmpty {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill").font(.system(size: 13)).foregroundStyle(Theme.ink)
+                                Text("Good service on all lines").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
+                                Spacer(minLength: 8)
+                                lineStrip.frame(width: 90)
+                            }
+                        } else {
+                            FlowLayout(spacing: 6) {
+                                ForEach(bad.prefix(5)) { line in lineChip(line) }
+                                if bad.count > 5 {
+                                    Text("+\(bad.count - 5)")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .padding(.horizontal, 9).frame(height: 26)
+                                        .background(Theme.track, in: Capsule())
+                                        .foregroundStyle(Theme.secondary)
+                                }
+                            }
+                        }
                     }
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Theme.tertiary)
-                        .rotationEffect(.degrees(compact ? 0 : 180))
                 }
                 .contentShape(Rectangle())
             }
@@ -153,9 +171,9 @@ struct TubeCard: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, compact ? 13 : 18)
+        .padding(.vertical, compact ? 15 : 18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: compact ? 18 : 22, style: .continuous))
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .task { await tube.refresh() }
         .sensoryFeedback(.selection, trigger: open)
         .sensoryFeedback(.impact(weight: .light), trigger: compact)
@@ -166,6 +184,22 @@ struct TubeCard: View {
         if bad.isEmpty { return "Good service" }
         if bad.count == 1, let line = bad.first { return "\(line.name): \(line.status)" }
         return "\(bad.count) lines disrupted"
+    }
+
+    /// A disrupted line: its colour, name and what's wrong, in one chip.
+    private func lineChip(_ line: TubeService.Line) -> some View {
+        HStack(spacing: 6) {
+            Capsule().fill(TubeService.colours[line.id] ?? Theme.ink).frame(width: 4, height: 14)
+            Text(line.name.replacingOccurrences(of: " line", with: ""))
+                .font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.ink)
+            Text(line.status)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(line.level == 2 ? Theme.accent : Theme.secondary)
+        }
+        .lineLimit(1)
+        .padding(.leading, 8).padding(.trailing, 10)
+        .frame(height: 26)
+        .background(line.level == 2 ? Theme.accent.opacity(0.1) : Theme.track, in: Capsule())
     }
 
     /// Every line's colour, faded when it's running well.
