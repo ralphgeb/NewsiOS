@@ -18,7 +18,8 @@ struct NewsView: View {
 
     var body: some View {
         NavigationStack {
-            ScoutPage(showSettings: $showSettings, title: "News", subtitle: subtitle, pinnedHeight: 46) { _ in
+            ScoutPage(showSettings: $showSettings, title: "News", subtitle: subtitle, pinnedHeight: 50,
+                      onRefresh: { await store.refresh() }, isRefreshing: store.isLoading) {
                 CapsuleSwitcher(items: NewsSection.allCases, selection: sectionBinding, title: \.rawValue)
                     .frame(height: 46)
                     .padding(.bottom, 4)

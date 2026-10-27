@@ -12,7 +12,8 @@ struct RumoursView: View {
     var body: some View {
         let list = store.rumours(status, sort: sort)
         NavigationStack {
-            ScoutPage(showSettings: $showSettings, title: "Rumours", subtitle: subtitle(list.count), pinnedHeight: 46) { _ in
+            ScoutPage(showSettings: $showSettings, title: "Rumours", subtitle: subtitle(list.count), pinnedHeight: 50,
+                      onRefresh: { await store.refresh() }, isRefreshing: store.isLoading) {
                 HStack(spacing: 0) {
                     CapsuleSwitcher(items: RumourStatus.allCases, selection: $status, title: \.title)
                     Menu {

@@ -91,8 +91,13 @@ struct Preset: Identifiable, Hashable {
     let accent: RGBA
 
     static let all: [Preset] = [
-        // Scout's first colors (the same as Halo's), and what Reset goes back to.
-        Preset(id: "graphite", name: "Original",
+        // Scout's own look, from the app icon: navy ink and the icon's red. What Reset goes back to.
+        Preset(id: "scout", name: "Scout",
+               light: .init(ink: .init(hex: 0x131B2C), background: .init(hex: 0xF5F6F8), card: .init(hex: 0xFFFFFF)),
+               dark: .init(ink: .init(hex: 0xEEF0F4), background: .init(hex: 0x0B0F18), card: .init(hex: 0x161D2C)),
+               accent: .init(hex: 0xE25555)),
+        // Halo's six looks.
+        Preset(id: "graphite", name: "Graphite",
                light: .init(ink: .init(hex: 0x121214), background: .init(hex: 0xF9F9F7), card: .init(hex: 0xFFFFFF)),
                dark: .init(ink: .init(hex: 0xF2F2ED), background: .init(hex: 0x090909), card: .init(hex: 0x171717)),
                accent: .init(hex: 0xFF6129)),
@@ -159,7 +164,7 @@ struct Appearance: Codable, Hashable {
     /// Light/dark is read when the color is drawn, so the widget follows the system too.
     static var current: Appearance = load()
 
-    private static let key = "appearance"
+    private static let key = "appearance.v2"     // v2: the Scout look became the default
 
     static func load() -> Appearance {
         guard let data = Shared.defaults.data(forKey: key),

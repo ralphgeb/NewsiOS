@@ -9,8 +9,9 @@ struct ScoutApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var store = NewsStore()
     @StateObject private var look = AppearanceStore()
-    @StateObject private var weather = WeatherService()
+    @StateObject private var weather = WeatherModel()
     @StateObject private var tube = TubeService()
+    @StateObject private var stocks = StocksStore()
     private static let refreshID = "com.ralphgeb.scout.refresh"
 
     init() {
@@ -36,6 +37,7 @@ struct ScoutApp: App {
                 .environmentObject(look)
                 .environmentObject(weather)
                 .environmentObject(tube)
+                .environmentObject(stocks)
                 .preferredColorScheme(look.appearance.mode.colorScheme)
         }
         .onChange(of: scenePhase) { _, phase in
@@ -83,7 +85,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 struct RootView: View {
     @EnvironmentObject private var store: NewsStore
     @EnvironmentObject private var look: AppearanceStore
-    @EnvironmentObject private var weather: WeatherService
+    @EnvironmentObject private var weather: WeatherModel
     @EnvironmentObject private var tube: TubeService
     @State private var showSettings = false
     @State private var showTopics = !Shared.hasChosenTopic
@@ -99,6 +101,9 @@ struct RootView: View {
             NewsView(showSettings: $showSettings)
                 .tabItem { Label("News", systemImage: "list.bullet.rectangle.portrait") }
                 .tag(1)
+            StocksView(showSettings: $showSettings)
+                .tabItem { Label("Stocks", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(4)
             RumoursView(showSettings: $showSettings)
                 .tabItem { Label("Rumours", systemImage: "dot.radiowaves.left.and.right") }
                 .badge(tab == 2 ? 0 : newRumours)
@@ -130,9 +135,10 @@ struct RootView: View {
                 .preferredColorScheme(look.appearance.mode.colorScheme)
         }
         .onOpenURL { url in
-            // Widget taps open a page: scout://today, scout://news, scout://rumours, scout://saved
+            // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://rumours, scout://saved
             switch url.host {
             case "news": tab = 1
+            case "stocks": tab = 4
             case "rumours": tab = 2
             case "saved": tab = 3
             default: tab = 0

@@ -25,6 +25,8 @@ enum Shared {
 enum Feed {
     static let news = "news.json"
     static let briefing = "briefing.json"
+    static let stocks = "stocks.json"
+    static let symbols = "symbols.json"
 
     static var base: URL {
         let s = Bundle.main.object(forInfoDictionaryKey: "ScoutDataURL") as? String

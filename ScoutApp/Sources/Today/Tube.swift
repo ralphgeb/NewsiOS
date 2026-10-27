@@ -83,61 +83,101 @@ final class TubeService: ObservableObject {
 struct TubeCard: View {
     @EnvironmentObject private var tube: TubeService
     @State private var open: String?
+    /// Tap the card's top line to fold it into one compact strip, and again to open it.
+    @AppStorage("tube.compact") private var compact = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Tube").scoutLabel()
-                Spacer()
-                if tube.isLoading { ProgressView().controlSize(.mini) }
-                if let f = tube.fetched {
+        let bad = tube.lines.filter { $0.level > 0 }
+        let good = tube.lines.filter { $0.level == 0 }
+        VStack(alignment: .leading, spacing: compact ? 0 : 12) {
+            Button {
+                withAnimation(.snappy) { compact.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "tram.fill").font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                    Text("Tube").font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.ink)
+                    if compact || tube.lines.isEmpty {
+                        Text(summary(bad))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(bad.contains { $0.level == 2 } ? Theme.accent : Theme.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    if compact {
+                        lineStrip.frame(width: 64)
+                    } else if tube.isLoading {
+                        ProgressView().controlSize(.mini)
+                    } else if let f = tube.fetched {
+                        Text(Format.time(f)).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.tertiary)
+                        .rotationEffect(.degrees(compact ? 0 : 180))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(compact ? "Tube, \(summary(bad)). Show details" : "Tube. Fold away")
+
+            if !compact {
+                if tube.lines.isEmpty {
                     Button { Task { await tube.refresh(force: true) } } label: {
-                        Text("Updated \(Format.time(f))").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
+                        Text(tube.failed ? "Tube status unavailable. Tap to try again." : "Loading…")
+                            .font(.system(size: 14)).foregroundStyle(Theme.secondary)
                     }
                     .buttonStyle(.plain)
-                }
-            }
-            if tube.lines.isEmpty {
-                Button { Task { await tube.refresh(force: true) } } label: {
-                    Text(tube.failed ? "Tube status unavailable. Tap to try again." : "Loading…")
-                        .font(.system(size: 14)).foregroundStyle(Theme.secondary)
-                }
-                .buttonStyle(.plain)
-            } else {
-                let bad = tube.lines.filter { $0.level > 0 }
-                let good = tube.lines.filter { $0.level == 0 }
-                if bad.isEmpty {
-                    HStack(spacing: 10) {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.ink)
-                        Text("Good service on all lines").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
-                    }
                 } else {
-                    VStack(spacing: 0) {
-                        ForEach(bad) { line in
-                            row(line)
-                            if line.id != bad.last?.id {
-                                Rectangle().fill(Theme.hairline).frame(height: 0.5).padding(.leading, 16)
+                    if bad.isEmpty {
+                        HStack(spacing: 10) {
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.ink)
+                            Text("Good service on all lines").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
+                        }
+                    } else {
+                        VStack(spacing: 0) {
+                            ForEach(bad) { line in
+                                row(line)
+                                if line.id != bad.last?.id {
+                                    Rectangle().fill(Theme.hairline).frame(height: 0.5).padding(.leading, 16)
+                                }
                             }
                         }
+                        if !good.isEmpty {
+                            Text("Good service on the other \(good.count) line\(good.count == 1 ? "" : "s")")
+                                .font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                        }
                     }
-                    if !good.isEmpty {
-                        Text("Good service on the other \(good.count) line\(good.count == 1 ? "" : "s")")
-                            .font(.system(size: 13)).foregroundStyle(Theme.secondary)
-                    }
+                    lineStrip
                 }
-                HStack(spacing: 3) {
-                    ForEach(tube.lines.sorted { $0.name < $1.name }) { line in
-                        Capsule().fill(TubeService.colours[line.id] ?? Theme.ink)
-                            .frame(height: 4)
-                            .opacity(line.level == 0 ? 0.35 : 1)
-                    }
-                }
-                .accessibilityHidden(true)
             }
         }
-        .scoutCard()
+        .padding(.horizontal, 18)
+        .padding(.vertical, compact ? 13 : 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: compact ? 18 : 22, style: .continuous))
         .task { await tube.refresh() }
         .sensoryFeedback(.selection, trigger: open)
+        .sensoryFeedback(.impact(weight: .light), trigger: compact)
+    }
+
+    private func summary(_ bad: [TubeService.Line]) -> String {
+        if tube.lines.isEmpty { return tube.failed ? "Unavailable" : "Loading…" }
+        if bad.isEmpty { return "Good service" }
+        if bad.count == 1, let line = bad.first { return "\(line.name): \(line.status)" }
+        return "\(bad.count) lines disrupted"
+    }
+
+    /// Every line's colour, faded when it's running well.
+    private var lineStrip: some View {
+        HStack(spacing: 2) {
+            ForEach(tube.lines.sorted { $0.name < $1.name }) { line in
+                Capsule().fill(TubeService.colours[line.id] ?? Theme.ink)
+                    .frame(height: 4)
+                    .opacity(line.level == 0 ? 0.3 : 1)
+            }
+        }
+        .accessibilityHidden(true)
     }
 
     private func row(_ line: TubeService.Line) -> some View {

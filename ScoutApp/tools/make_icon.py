@@ -1,66 +1,39 @@
-"""Draws Scout's app icon in Halo's style: one ring, 80% filled in near-white, the rest in the
-quiet track grey, with the accent dot at the tip, and three headline lines inside.
+"""Draws Scout's app icon: the ScoutAI icon (a bold white headline with the red dot, then three
+grey lines on navy), redrawn at full size so it stays sharp. Measurements are from ScoutAI's
+icons/icon-512.png, doubled.
 
     python3 tools/make_icon.py   # writes Sources/Assets.xcassets/AppIcon.appiconset/icon-1024.png
 """
-import math
 from pathlib import Path
 from PIL import Image, ImageDraw
 
 SIZE = 1024
 SCALE = 4                      # draw large, then shrink, for smooth edges
-RADIUS = 299.5                 # centre of the stroke
-STROKE = 96                    # a little lighter than Halo's, to leave room for the lines
-FILL = 0.80                    # share of the ring drawn in white
-INK = (242, 242, 237)          # near-white
-TRACK = (51, 51, 54)           # the minimal grey of the empty part
-ACCENT = (255, 97, 41)
-TRACK_LIGHT = (110, 110, 114)  # the short last line, quieter
-CENTER = (24, 25, 28)          # background, lightest near the middle
-CORNER = (11, 11, 14)          # darkest at the bottom-right corner
+NAVY = (19, 27, 44)
+WHITE = (255, 255, 255)
+GREY = (149, 154, 162)
+RED = (211, 84, 84)
 
-
-def background(size):
-    img = Image.new("RGB", (size, size))
-    px = img.load()
-    cx, cy = size * 0.42, size * 0.40
-    far = math.hypot(size - cx, size - cy)
-    for y in range(size):
-        for x in range(size):
-            t = min(1.0, math.hypot(x - cx, y - cy) / far) ** 1.4
-            px[x, y] = tuple(round(a + (b - a) * t) for a, b in zip(CENTER, CORNER))
-    return img
+# On the 512 grid: (left, top, right, bottom), bars have fully round ends.
+HEADLINE = (111, 150, 334, 196)
+LINES = [(111, 234, 402, 265), (111, 294, 402, 325), (111, 354, 300, 385)]
+DOT = (383.5, 172.5, 32)       # centre x, centre y, radius
 
 
 def main():
-    s = SIZE * SCALE
-    img = background(SIZE).resize((s, s), Image.BICUBIC)
+    k = SIZE / 512 * SCALE
+    img = Image.new("RGB", (SIZE * SCALE, SIZE * SCALE), NAVY)
     d = ImageDraw.Draw(img)
-    c, r, w = s / 2, RADIUS * SCALE, STROKE * SCALE
-    box = [c - r - w / 2, c - r - w / 2, c + r + w / 2, c + r + w / 2]
 
-    def point(fraction):
-        a = math.radians(-90 + 360 * fraction)
-        return c + r * math.cos(a), c + r * math.sin(a)
+    def bar(box, colour):
+        l, t, r, b = (v * k for v in box)
+        d.rounded_rectangle([l, t, r, b], radius=(b - t) / 2, fill=colour)
 
-    def cap(fraction, colour, diameter):
-        x, y = point(fraction)
-        d.ellipse([x - diameter / 2, y - diameter / 2, x + diameter / 2, y + diameter / 2], fill=colour)
-
-    # The empty part first, then the filled part over it, starting at twelve o'clock.
-    d.arc(box, start=-90 + 360 * FILL, end=270, fill=TRACK, width=round(w))
-    d.arc(box, start=-90, end=-90 + 360 * FILL, fill=INK, width=round(w))
-    cap(0, INK, w)
-    cap(FILL, INK, w)
-    cap(FILL, ACCENT, w * 0.56)
-
-    # Three headline lines: a long one, a long one, and a short one.
-    lw = 52 * SCALE
-    for dy, length in ((-92, 300), (0, 300), (92, 190)):
-        y = c + dy * SCALE
-        x0 = c - 150 * SCALE
-        x1 = x0 + length * SCALE
-        d.rounded_rectangle([x0, y - lw / 2, x1, y + lw / 2], radius=lw / 2, fill=INK if dy < 92 else TRACK_LIGHT)
+    bar(HEADLINE, WHITE)
+    for line in LINES:
+        bar(line, GREY)
+    x, y, r = (v * k for v in DOT)
+    d.ellipse([x - r, y - r, x + r, y + r], fill=RED)
 
     out = Path(__file__).resolve().parent.parent / "Sources/Assets.xcassets/AppIcon.appiconset/icon-1024.png"
     img.resize((SIZE, SIZE), Image.LANCZOS).save(out, optimize=True)

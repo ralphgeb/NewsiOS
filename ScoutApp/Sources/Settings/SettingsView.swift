@@ -26,11 +26,11 @@ final class AppearanceStore: ObservableObject {
 struct SettingsView: View {
     @EnvironmentObject private var store: NewsStore
     @EnvironmentObject private var look: AppearanceStore
-    @EnvironmentObject private var weather: WeatherService
+    @EnvironmentObject private var weather: WeatherModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @AppStorage(WeekStart.key) private var weekStartsOnMonday = WeekStart.startsOnMonday
-    @AppStorage(WeatherService.modeKey) private var weatherMode = WeatherService.Mode.location.rawValue
+    @AppStorage(WeatherModel.modeKey) private var weatherMode = WeatherModel.Mode.location.rawValue
     @AppStorage("links.reader") private var reader = false
     @AppStorage(Notifier.enabledKey) private var notify = false
     @State private var notifyNote: String?
@@ -198,7 +198,7 @@ struct SettingsView: View {
     private var todaySection: some View {
         Section {
             Picker("Weather", selection: $weatherMode) {
-                ForEach(WeatherService.Mode.allCases) { Text($0.title).tag($0.rawValue) }
+                ForEach(WeatherModel.Mode.allCases) { Text($0.title).tag($0.rawValue) }
             }
             .onChange(of: weatherMode) { _, _ in Task { await weather.refresh(force: true) } }
             Picker("Week starts on", selection: $weekStartsOnMonday) {
@@ -208,7 +208,7 @@ struct SettingsView: View {
         } header: {
             Text("Today")
         } footer: {
-            Text("Weather by Open-Meteo, Tube status live from TfL. To hide a card, or move it, tap Edit on Today.")
+            Text("Weather from Apple Weather, Tube status live from TfL. Tap the Tube card to fold it away. To hide a card, or move it, tap Edit on Today.")
         }
         .listRowBackground(Theme.card)
     }

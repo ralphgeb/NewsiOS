@@ -7,18 +7,18 @@ struct StoryRoute: Hashable {
     var sequence: [String] = []
 }
 
-/// Every story that names one company.
+/// A company's page: its live price, chart, AI summary and every story that names it.
 struct TickerRoute: Hashable {
     let ticker: String
     let name: String?
 }
 
 extension View {
-    /// The pages every tab can push: a story, and a company's stories.
+    /// The pages every tab can push: a story, and a company.
     func storyDestinations() -> some View {
         self
             .navigationDestination(for: StoryRoute.self) { StoryPager(route: $0) }
-            .navigationDestination(for: TickerRoute.self) { TickerStoriesView(route: $0) }
+            .navigationDestination(for: TickerRoute.self) { StockDetailView(route: $0) }
     }
 }
 
@@ -208,19 +208,25 @@ struct TickerChips: View {
     }
 }
 
-/// A section label with an optional count on the right, like Halo's card labels.
+/// A section title: big and heavy like the page titles, in the accent, with an optional count.
 struct SectionHead: View {
     let title: String
     var detail: String? = nil
 
     var body: some View {
-        HStack {
-            Text(title).scoutLabel()
+        HStack(alignment: .firstTextBaseline) {
+            Text(title)
+                .font(.system(size: 26, weight: .heavy))
+                .tracking(-0.5)
+                .foregroundStyle(Theme.accent)
             Spacer()
-            if let detail { Text(detail).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary) }
+            if let detail {
+                Text(detail).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.tertiary)
+            }
         }
-        .padding(.horizontal, 4)
-        .padding(.top, 8)
+        .padding(.horizontal, 2)
+        .padding(.top, 14)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 

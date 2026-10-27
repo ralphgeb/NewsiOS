@@ -31,7 +31,7 @@ enum Theme {
     }
 
     /// Headlines in the chosen style.
-    static func headline(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+    static func headline(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
         .system(size: size, weight: weight, design: Appearance.current.numberStyle.design)
     }
 

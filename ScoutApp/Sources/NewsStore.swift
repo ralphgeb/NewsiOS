@@ -65,16 +65,12 @@ final class NewsStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var lastError: String?
     @Published private(set) var lastFetch: Date?
-    @Published private(set) var selectedDate: Date = Calendar.current.startOfDay(for: .now)
     @Published private(set) var saved: [Story] = []
-    /// Stories per day in the Today topic, for the calendar.
-    @Published private(set) var dayCounts: [Date: Int] = [:]
 
     @Published var topic: Topic {
         didSet {
             guard topic != oldValue else { return }
             Shared.topic = topic
-            recountDays()
         }
     }
 
@@ -104,7 +100,6 @@ final class NewsStore: ObservableObject {
         if let data = Feed.cached(Feed.briefing), let b = Feed.decodeBriefing(data) {
             briefing = b
         }
-        recountDays()
     }
 
     /// Fetches the latest news and briefing. The updater writes them twice a day, so this is cheap.
@@ -121,7 +116,6 @@ final class NewsStore: ObservableObject {
             }.value
             if let file = decoded.0 { apply(file) }
             if let brief = decoded.1 { briefing = brief }
-            recountDays()
             lastFetch = .now
             lastError = decoded.0 == nil ? "The news file couldn't be read. It may be mid-update; try again shortly." : nil
             WidgetCenter.shared.reloadTimelines(ofKind: Shared.widgetKind)
@@ -151,40 +145,6 @@ final class NewsStore: ObservableObject {
     func story(_ id: String?) -> Story? {
         guard let id else { return nil }
         return byId[id] ?? saved.first { $0.id == id }
-    }
-
-    // MARK: Days
-
-    var isTodaySelected: Bool { cal.isDateInToday(selectedDate) }
-
-    func select(_ date: Date) {
-        selectedDate = cal.startOfDay(for: min(date, .now))
-    }
-
-    /// The first day the calendar offers.
-    var firstDate: Date {
-        let earliest = dayCounts.keys.min() ?? .now
-        let monthAgo = cal.date(byAdding: .day, value: -60, to: .now) ?? .now
-        return cal.startOfDay(for: max(earliest, monthAgo))
-    }
-
-    func hasContent(on date: Date) -> Bool {
-        let day = cal.startOfDay(for: date)
-        return (dayCounts[day] ?? 0) > 0 || isBriefed(day)
-    }
-
-    func isBriefed(_ date: Date) -> Bool {
-        if topic == .tech { return briefing.editions.contains { cal.isDate($0.generated, inSameDayAs: date) } }
-        guard let g = briefing.section(topic)?.generated else { return false }
-        return cal.isDate(g, inSameDayAs: date)
-    }
-
-    private func recountDays() {
-        var counts: [Date: Int] = [:]
-        for s in stories where s.newsSection == topic && s.published != .distantPast {
-            counts[cal.startOfDay(for: s.published), default: 0] += 1
-        }
-        dayCounts = counts
     }
 
     // MARK: Ranking (the same as the web app)
@@ -237,20 +197,23 @@ final class NewsStore: ObservableObject {
 
     // MARK: Front page
 
-    func editions(on date: Date) -> [Edition] {
-        briefing.editions.filter { cal.isDate($0.generated, inSameDayAs: date) }.sorted { $0.generated > $1.generated }
+    /// The latest Tech edition and the other one from the same day (morning and evening), newest first.
+    func latestEditions() -> [Edition] {
+        guard let latest = briefing.editions.max(by: { $0.generated < $1.generated }) else { return [] }
+        return briefing.editions.filter { cal.isDate($0.generated, inSameDayAs: latest.generated) }.sorted { $0.generated > $1.generated }
     }
 
-    func frontPage(on date: Date, edition: String?) -> FrontPage? {
-        let isToday = cal.isDateInToday(date)
+    /// Today's front page: the latest briefing for your topic, or the biggest stories of the last
+    /// 30 hours while the first one is being written.
+    func frontPage(edition: String?) -> FrontPage? {
         let since = Date.now.addingTimeInterval(-30 * 3600)
         let pool = stories
-            .filter { $0.newsSection == topic && (isToday ? $0.published >= since : cal.isDate($0.published, inSameDayAs: date)) }
+            .filter { $0.newsSection == topic && $0.published >= since }
             .sorted { storyScore($0) > storyScore($1) }
         let name = topic.rawValue.lowercased()
 
         if topic == .tech {
-            let eds = editions(on: date)
+            let eds = latestEditions()
             if let ed = eds.first(where: { $0.id == edition }) ?? eds.first {
                 let items = ed.topStories.enumerated().map { i, t in
                     FrontPage.Item(id: "\(i)-\(t.storyId ?? t.title)", story: story(t.storyId), title: t.title, text: t.summary)
@@ -267,8 +230,7 @@ final class NewsStore: ObservableObject {
                     more: [], reviewed: ed.storyCount ?? pool.count, isWritten: true,
                     editions: eds, editionID: ed.id)
             }
-        } else if let b = briefing.section(topic), let g = b.generated,
-                  isToday ? g >= since : cal.isDate(g, inSameDayAs: date) {
+        } else if let b = briefing.section(topic), let g = b.generated, g >= since {
             let points = b.points.enumerated().map { i, p in
                 let s = story(p.storyId)
                 return FrontPage.Item(id: "\(i)-\(p.storyId ?? p.line)", story: s, title: s?.title ?? p.line, text: p.line)
@@ -284,12 +246,12 @@ final class NewsStore: ObservableObject {
                 reviewed: pool.count, isWritten: true, editions: [], editionID: nil)
         }
 
-        // No briefing written for that day: its biggest stories instead.
+        // No recent briefing: the biggest stories instead.
         guard !pool.isEmpty else { return nil }
         let cover = pool.first { $0.imageURL != nil } ?? pool[0]
         let rest = pool.filter { $0.id != cover.id }
         return FrontPage(
-            label: isToday ? "Biggest \(name) stories so far" : "Biggest \(name) stories",
+            label: "Biggest \(name) stories",
             generated: nil, title: cover.title, intro: Self.paragraphs(cover.summary), cover: cover,
             items: rest.prefix(5).map { FrontPage.Item(id: $0.id, story: $0, title: $0.title, text: $0.summary) },
             rumours: [], movers: [], moversTitle: topic.moversTitle, brief: [],

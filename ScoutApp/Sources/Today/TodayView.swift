@@ -8,7 +8,7 @@ struct TodayView: View {
     @State private var showTopics = false
 
     // Edit mode, as in Halo: drag cards to reorder them, minus to hide one, plus to bring it back.
-    @AppStorage("today.cards.v1") private var orderRaw = ""
+    @AppStorage("today.cards.v2") private var orderRaw = ""
     @AppStorage("today.hidden") private var hiddenRaw = ""
     @State private var editing = false
     @State private var dragging: TodayCard?
@@ -18,9 +18,10 @@ struct TodayView: View {
     private let spacing: CGFloat = 14              // ScoutPage's gap between cards
 
     var body: some View {
-        let page = store.frontPage(on: store.selectedDate, edition: editionID)
+        let page = store.frontPage(edition: editionID)
         NavigationStack(path: $path) {
-            ScoutPage(showSettings: $showSettings, editing: $editing) {
+            ScoutPage(showSettings: $showSettings, title: "Today", subtitle: subtitle, editing: $editing,
+                      onRefresh: { await store.refresh() }, isRefreshing: store.isLoading) {
                 if let page {
                     ForEach(visible(page)) { card in
                         editableCard(card, page: page)
@@ -39,13 +40,20 @@ struct TodayView: View {
             .onPreferenceChange(CardHeightsKey.self) { heights = $0 }
             .storyDestinations()
         }
-        .onChange(of: store.selectedDate) { _, _ in editionID = nil }
+        .onChange(of: store.topic) { _, _ in editionID = nil }
         .onChange(of: editing) { _, on in if !on { dragging = nil; dragOffset = 0 } }
         .sheet(isPresented: $showTopics) { TopicPicker().environmentObject(store).presentationDetents([.medium, .large]) }
         .sensoryFeedback(.impact(weight: .light), trigger: orderRaw)
         .sensoryFeedback(.selection, trigger: hiddenRaw)
         .sensoryFeedback(.impact(weight: .medium), trigger: dragging)
         .sensoryFeedback(.selection, trigger: editionID)
+    }
+
+    /// "Tuesday 27 October · updated 10h ago", on one line like the other tabs.
+    private var subtitle: String {
+        let day = Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))
+        guard let u = store.updated else { return day }
+        return "\(day) · updated \(Format.ago(u).lowercased())"
     }
 
     // MARK: Order and hiding
@@ -65,7 +73,7 @@ struct TodayView: View {
 
     private func isAvailable(_ card: TodayCard, _ page: FrontPage) -> Bool {
         switch card {
-        case .weather, .tube, .cover: return true
+        case .weather, .tube, .markets, .cover: return true
         case .top: return !page.items.isEmpty
         case .rumours: return !page.rumours.isEmpty
         case .movers: return !page.movers.isEmpty
@@ -223,6 +231,7 @@ struct TodayView: View {
         switch card {
         case .weather: WeatherCard()
         case .tube: TubeCard()
+        case .markets: MarketsCard()
         case .cover: CoverCard(page: page, sequence: seq, editionID: $editionID)
         case .top: TopStoriesCard(items: page.items, sequence: seq, title: page.isWritten ? "Top stories" : "Key stories")
         case .rumours: RumourWatchCard(items: page.rumours, sequence: seq)
@@ -243,10 +252,8 @@ struct TodayView: View {
                     .foregroundStyle(Theme.ink)
             } else {
                 EmptyCard(symbol: "sun.horizon",
-                          title: store.isTodaySelected ? "Your briefing is on its way" : "Nothing from that day",
-                          text: store.isTodaySelected
-                            ? "Briefings arrive at 5:00 each morning. Pull down on News to check for the latest stories."
-                            : "Pick another day from the calendar.")
+                          title: "Your briefing is on its way",
+                          text: "Briefings arrive at 5:00 each morning. Pull down to check for the latest stories.")
             }
         }
     }
@@ -287,7 +294,7 @@ struct CardHeightsKey: PreferenceKey {
 
 /// The cards on Today, in their default order.
 enum TodayCard: String, CaseIterable, Identifiable {
-    case weather, tube, cover, top, rumours, movers, brief, more
+    case weather, tube, cover, markets, top, rumours, movers, brief, more
 
     var id: String { rawValue }
 
@@ -295,6 +302,7 @@ enum TodayCard: String, CaseIterable, Identifiable {
         switch self {
         case .weather: return "Weather"
         case .tube: return "Tube status"
+        case .markets: return "Markets"
         case .cover: return "Briefing"
         case .top: return "Top stories"
         case .rumours: return "Rumour watch"
@@ -307,6 +315,16 @@ enum TodayCard: String, CaseIterable, Identifiable {
 
 // MARK: - Cards
 
+/// The markets strip from Stocks, kept fresh while Today is open.
+struct MarketsCard: View {
+    @EnvironmentObject private var stocks: StocksStore
+
+    var body: some View {
+        MarketsStrip()
+            .task { await stocks.keepLive { stocks.markets } }
+    }
+}
+
 /// The day's cover: the lead picture, the briefing's headline and its overview.
 struct CoverCard: View {
     let page: FrontPage
@@ -317,53 +335,70 @@ struct CoverCard: View {
         VStack(alignment: .leading, spacing: 0) {
             NavigationLink(value: page.cover.map { StoryRoute(id: $0.id, sequence: sequence) }) {
                 StoryImage(story: page.cover)
-                    .frame(height: 230)
-                    .overlay(alignment: .bottomLeading) {
-                        LinearGradient(colors: [.black.opacity(0), .black.opacity(0.55)], startPoint: .center, endPoint: .bottom)
+                    .frame(height: 340)
+                    .overlay {
+                        LinearGradient(stops: [.init(color: .black.opacity(0.35), location: 0),
+                                               .init(color: .black.opacity(0), location: 0.25),
+                                               .init(color: .black.opacity(0), location: 0.4),
+                                               .init(color: .black.opacity(0.82), location: 1)],
+                                       startPoint: .top, endPoint: .bottom)
                             .allowsHitTesting(false)
                     }
                     .overlay(alignment: .bottomLeading) {
-                        if let cover = page.cover, cover.imageURL != nil {
-                            Text(cover.outletName)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.9))
-                                .padding(14)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(page.title)
+                                .font(Theme.headline(28, weight: .heavy))
+                                .tracking(-0.4)
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(5)
+                                .minimumScaleFactor(0.8)
+                                .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+                            HStack(spacing: 4) {
+                                if let cover = page.cover { Text(cover.outletName) }
+                                Text("· \(page.reviewed) stories reviewed")
+                                if let g = page.generated { Text("· \(Format.time(g))") }
+                            }
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.75))
+                            .lineLimit(1)
                         }
+                        .padding(18)
+                    }
+                    .overlay(alignment: .topLeading) {
+                        Text(page.label)
+                            .font(.system(size: 11, weight: .heavy))
+                            .tracking(1)
+                            .textCase(.uppercase)
+                            .padding(.horizontal, 10)
+                            .frame(height: 24)
+                            .background(Theme.accent, in: Capsule())
+                            .foregroundStyle(.white)
+                            .padding(14)
                     }
             }
             .buttonStyle(PressStyle())
             .disabled(page.cover == nil)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Circle().fill(Theme.accent).frame(width: 7, height: 7)
-                    Text(page.label).scoutLabel()
-                    Spacer()
-                    if page.editions.count > 1 { editionSwitch }
-                }
-                Text(page.title)
-                    .font(Theme.headline(26, weight: .bold))
-                    .foregroundStyle(Theme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-                ForEach(page.intro, id: \.self) { p in
-                    Text(p)
-                        .font(.system(size: 15))
-                        .foregroundStyle(Theme.ink.opacity(0.8))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                HStack(spacing: 4) {
-                    Text("\(page.reviewed) stories reviewed")
-                    if let g = page.generated { Text("· \(Format.time(g))") }
-                }
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.tertiary)
+            .overlay(alignment: .topTrailing) {
+                if page.editions.count > 1 { editionSwitch.padding(12) }
             }
-            .padding(18)
+
+            if !page.intro.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(page.intro, id: \.self) { p in
+                        Text(p)
+                            .font(.system(size: 16))
+                            .lineSpacing(2)
+                            .foregroundStyle(Theme.ink.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(18)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     /// Morning or evening, when the day has both.
@@ -377,15 +412,16 @@ struct CoverCard: View {
                     Image(systemName: ed.isEvening ? "moon.fill" : "sun.max.fill")
                         .font(.system(size: 11, weight: .semibold))
                         .frame(width: 30, height: 24)
-                        .background(on ? Theme.ink : Color.clear, in: Capsule())
-                        .foregroundStyle(on ? Theme.background : Theme.secondary)
+                        .background(on ? Color.white : Color.clear, in: Capsule())
+                        .foregroundStyle(on ? Color.black : Color.white.opacity(0.8))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(ed.edition) briefing")
             }
         }
         .padding(2)
-        .background(Theme.track, in: Capsule())
+        .background(.ultraThinMaterial, in: Capsule())
+        .environment(\.colorScheme, .dark)
     }
 }
 

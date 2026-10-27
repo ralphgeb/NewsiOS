@@ -11,6 +11,8 @@ settings:
     CODE_SIGN_STYLE: Automatic
     # Where the news comes from: the data folder the ScoutAI updater writes twice a day.
     SCOUT_DATA_URL: "https://raw.githubusercontent.com/ralphgeb/ScoutAI/main/data"
+    # The shared list of stocks people follow (ScoutAI/stocks-worker), so each gets a daily AI summary.
+    SCOUT_STOCKS_URL: "https://scout-stocks.ralph-gebara.workers.dev"
 
 targets:
   Scout:
@@ -36,6 +38,7 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: Scout uses your location for the weather card on Today. It's only used on this iPhone.
         ScoutDataURL: $(SCOUT_DATA_URL)
+        ScoutStocksURL: $(SCOUT_STOCKS_URL)
         CFBundleURLTypes:
           - CFBundleURLName: Scout
             CFBundleURLSchemes:
@@ -45,6 +48,7 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.ralphgeb.scout
+        com.apple.developer.weatherkit: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ralphgeb.scout
