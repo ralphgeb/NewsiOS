@@ -59,6 +59,21 @@ enum Feed {
         return data
     }
 
+    /// stocks.json lives on the Scout service (updated every 30 minutes); GitHub's copy is the fallback.
+    static func fetchStocks() async -> Data? {
+        if let s = Bundle.main.object(forInfoDictionaryKey: "ScoutStocksURL") as? String, let base = URL(string: s) {
+            var request = URLRequest(url: base.appending(path: stocks))
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.timeoutInterval = 30
+            if let result = try? await URLSession.shared.data(for: request),
+               (result.1 as? HTTPURLResponse)?.statusCode == 200 {
+                try? result.0.write(to: cacheURL(stocks), options: .atomic)
+                return result.0
+            }
+        }
+        return try? await fetch(stocks)
+    }
+
     static func cached(_ name: String) -> Data? {
         try? Data(contentsOf: cacheURL(name))
     }

@@ -318,13 +318,13 @@ enum TodayCard: String, CaseIterable, Identifiable {
 
 // MARK: - Cards
 
-/// The markets strip from Stocks, kept fresh while Today is open.
+/// The markets strip from Stocks, from the latest 30-minute update.
 struct MarketsCard: View {
     @EnvironmentObject private var stocks: StocksStore
 
     var body: some View {
         MarketsStrip()
-            .task { await stocks.keepLive { stocks.markets } }
+            .task { await stocks.refreshFileIfStale() }
     }
 }
 

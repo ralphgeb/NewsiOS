@@ -1,19 +1,16 @@
 import Charts
 import SwiftUI
 
-/// One company, index or market: live price, a chart you can drag across, key numbers, the AI's
-/// take, headlines and every Scout story that names it.
+/// One company, index or market: the price (updated every 30 minutes), a chart you can drag across,
+/// key numbers, the AI's take, headlines and every Scout story that names it.
 struct StockDetailView: View {
     @EnvironmentObject private var stocks: StocksStore
     @EnvironmentObject private var store: NewsStore
     let route: TickerRoute
-    @State private var range: Yahoo.Range = .day
+    @State private var range: ChartRange = .day
     @State private var points: [ChartPoint] = []
-    @State private var loadingChart = false
     @State private var selected: Date?
     @State private var reading: WebLink?
-    /// Headlines fetched live, for stocks the morning update hasn't covered yet.
-    @State private var liveNews: [StockHeadline] = []
     /// Apple Intelligence's quick summary, until Scout's own arrives.
     @State private var localSummary: OnDeviceSummary.Result?
     @State private var writing = false
@@ -35,7 +32,7 @@ struct StockDetailView: View {
                     SectionHead(title: "In Scout", detail: "\(stories.count) stor\(stories.count == 1 ? "y" : "ies")")
                     StoryList(stories: Array(stories.prefix(12)), sequence: stories.map(\.id))
                 }
-                Text("Prices from Yahoo Finance and may be delayed. The summary is written by AI and can be wrong. Not financial advice.")
+                Text("Prices update every 30 minutes on weekdays. The summary is written by AI and can be wrong. Not financial advice.")
                     .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                     .multilineTextAlignment(.center).frame(maxWidth: .infinity).padding(.horizontal, 20)
             }
@@ -61,16 +58,11 @@ struct StockDetailView: View {
             }
         }
         .tint(Theme.ink)
-        .task(id: range) { await loadChart() }
         .task { await prepareSummary() }
-        .task {
-            // keep the price live while the page is open
-            while !Task.isCancelled {
-                await stocks.refreshLive([symbol])
-                if range == .day, let pts = stocks.intraday[symbol], pts.count > 1 { points = pts }
-                try? await Task.sleep(for: .seconds(stocks.anyMarketOpen ? 60 : 300))
-            }
-        }
+        // the chart follows the range and each new 30-minute update
+        .onAppear { points = stocks.fileChart(symbol, range) }
+        .onChange(of: range) { _, r in withAnimation(.snappy) { points = stocks.fileChart(symbol, r) } }
+        .onChange(of: stocks.file?.pricesUpdated) { _, _ in points = stocks.fileChart(symbol, range) }
         .sheet(item: $reading) { SafariView(url: $0.url, reader: reader).ignoresSafeArea() }
     }
 
@@ -79,7 +71,6 @@ struct StockDetailView: View {
     /// Fresh headlines and, if Scout has no summary yet, a quick one from Apple Intelligence.
     private func prepareSummary() async {
         await stocks.refreshFileIfStale()
-        if stocks.headlines(symbol).isEmpty { liveNews = await Yahoo.news(symbol) }
         guard isCompany, stocks.summary(symbol) == nil, localSummary == nil, OnDeviceSummary.isAvailable else { return }
         writing = true
         defer { writing = false }
@@ -88,20 +79,9 @@ struct StockDetailView: View {
         let q = stocks.quote(symbol)
         let result = await OnDeviceSummary.write(
             name: q?.displayName ?? route.name ?? symbol, symbol: symbol, quote: q, monthChange: monthChange,
-            headlines: stocks.headlines(symbol).isEmpty ? liveNews : stocks.headlines(symbol),
+            headlines: stocks.headlines(symbol),
             stories: store.stories(mentioning: symbol))
         withAnimation(.snappy) { localSummary = result }
-    }
-
-    private func loadChart() async {
-        loadingChart = true
-        defer { loadingChart = false }
-        if let r = try? await Yahoo.chart(symbol, range: range), r.points.count > 1 {
-            withAnimation(.snappy) { points = r.points }
-        } else {
-            let fallback = stocks.fileChart(symbol, range)
-            withAnimation(.snappy) { points = fallback }
-        }
     }
 
     // MARK: Header
@@ -139,7 +119,6 @@ struct StockDetailView: View {
                 }
                 Text(shown.map { label(for: $0.time) } ?? rangeLabel(q))
                     .font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
-                if shown == nil, q?.marketState == "REGULAR" { LiveDot() }
             }
         }
         .animation(.snappy, value: value)
@@ -148,20 +127,17 @@ struct StockDetailView: View {
     private func rangeLabel(_ q: Quote?) -> String {
         switch range {
         case .day:
-            if q?.marketState == "REGULAR" { return "Today · live" }
-            return q?.updatedAt.map { "At close · \($0.formatted(.dateTime.weekday(.abbreviated).hour().minute()))" } ?? "Today"
-        case .week: return "Past week"
+            guard let t = q?.updatedAt else { return "Today" }
+            let when = Calendar.current.isDateInToday(t) ? Format.time(t) : t.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+            return q?.marketState == "REGULAR" ? "Today · at \(when)" : "At close · \(when)"
         case .month: return "Past month"
-        case .half: return "Past 6 months"
         case .year: return "Past year"
-        case .five: return "Past 5 years"
         }
     }
 
     private func label(for date: Date) -> String {
         switch range {
         case .day: return date.formatted(date: .omitted, time: .shortened)
-        case .week: return date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
         default: return date.formatted(.dateTime.day().month(.abbreviated).year())
         }
     }
@@ -221,15 +197,16 @@ struct StockDetailView: View {
                     }
                     .chartXSelection(value: $selected)
                     .sensoryFeedback(.selection, trigger: selectedPoint?.time)
-                } else if !loadingChart {
-                    Text("No chart for this range").font(.system(size: 13)).foregroundStyle(Theme.tertiary)
+                } else {
+                    Text(stocks.quote(symbol) == nil ? "The chart arrives with the next update, within 30 minutes." : "No chart for this range yet.")
+                        .font(.system(size: 13)).foregroundStyle(Theme.tertiary)
+                        .multilineTextAlignment(.center)
                 }
-                if loadingChart && points.count < 2 { ProgressView() }
             }
             .frame(height: 220)
 
             HStack(spacing: 4) {
-                ForEach(Yahoo.Range.allCases) { r in
+                ForEach(ChartRange.allCases) { r in
                     Button {
                         withAnimation(.snappy) { range = r; selected = nil }
                     } label: {
@@ -345,7 +322,7 @@ struct StockDetailView: View {
 
     @ViewBuilder
     private var headlines: some View {
-        let list = stocks.headlines(symbol).isEmpty ? liveNews : stocks.headlines(symbol)
+        let list = stocks.headlines(symbol)
         if !list.isEmpty {
             SectionHead(title: "Headlines", detail: "\(list.count)")
             VStack(spacing: 0) {
@@ -371,18 +348,5 @@ struct StockDetailView: View {
             }
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
-    }
-}
-
-/// A small pulsing accent dot for live prices.
-struct LiveDot: View {
-    @State private var on = false
-
-    var body: some View {
-        Circle().fill(Theme.accent)
-            .frame(width: 7, height: 7)
-            .overlay(Circle().stroke(Theme.accent, lineWidth: 1.5).scaleEffect(on ? 2.4 : 1).opacity(on ? 0 : 0.8))
-            .onAppear { withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { on = true } }
-            .accessibilityLabel("Live")
     }
 }

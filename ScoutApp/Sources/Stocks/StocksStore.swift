@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - stocks.json (written by the ScoutAI updater: hourly prices, AI summaries each morning)
+// MARK: - stocks.json (written by the ScoutAI updater: prices every 30 minutes, AI summaries each morning)
 
 struct Quote: Codable, Hashable {
     var symbol: String
@@ -155,143 +155,18 @@ struct StocksFile: Decodable {
     }
 }
 
-// MARK: - Yahoo Finance (live, straight from the iPhone: free, no key)
+// MARK: - Chart ranges (the charts in stocks.json)
 
-enum Yahoo {
-    enum Range: String, CaseIterable, Identifiable {
-        case day = "1D", week = "1W", month = "1M", half = "6M", year = "1Y", five = "5Y"
-        var id: String { rawValue }
+enum ChartRange: String, CaseIterable, Identifiable {
+    case day = "1D", month = "1M", year = "1Y"
+    var id: String { rawValue }
 
-        var query: (range: String, interval: String) {
-            switch self {
-            case .day: return ("1d", "5m")
-            case .week: return ("5d", "30m")
-            case .month: return ("1mo", "1d")
-            case .half: return ("6mo", "1d")
-            case .year: return ("1y", "1d")
-            case .five: return ("5y", "1wk")
-            }
+    var fileKey: String {
+        switch self {
+        case .day: return "d1"
+        case .month: return "m1"
+        case .year: return "y1"
         }
-
-        /// The matching chart in stocks.json, for when Yahoo can't be reached.
-        var fileKey: String? {
-            switch self {
-            case .day: return "d1"
-            case .month: return "m1"
-            case .year: return "y1"
-            default: return nil
-            }
-        }
-    }
-
-    struct Result {
-        var quote: Quote
-        var points: [ChartPoint]
-        var isOpen: Bool
-    }
-
-    private struct Response: Decodable {
-        struct Chart: Decodable { let result: [Item]? }
-        struct Item: Decodable {
-            let meta: Meta
-            let timestamp: [Double]?
-            let indicators: Indicators
-        }
-        struct Meta: Decodable {
-            let symbol: String?
-            let currency: String?
-            let exchangeName: String?
-            let fullExchangeName: String?
-            let regularMarketPrice: Double?
-            let regularMarketTime: Double?
-            let chartPreviousClose: Double?
-            let previousClose: Double?
-            let regularMarketDayHigh: Double?
-            let regularMarketDayLow: Double?
-            let regularMarketVolume: Double?
-            let fiftyTwoWeekHigh: Double?
-            let fiftyTwoWeekLow: Double?
-            let longName: String?
-            let shortName: String?
-            let currentTradingPeriod: Periods?
-        }
-        struct Periods: Decodable { let regular: Period? }
-        struct Period: Decodable { let start: Double; let end: Double }
-        struct Indicators: Decodable { let quote: [Closes]? }
-        struct Closes: Decodable { let close: [Double?]? }
-        let chart: Chart
-    }
-
-    private static let session: URLSession = {
-        let config = URLSessionConfiguration.default
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
-        config.timeoutIntervalForRequest = 12
-        config.httpAdditionalHeaders = ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"]
-        return URLSession(configuration: config)
-    }()
-
-    private struct SearchResponse: Decodable {
-        struct Item: Decodable {
-            let title: String?
-            let publisher: String?
-            let link: String?
-            let providerPublishTime: Double?
-        }
-        let news: [Item]?
-    }
-
-    /// The latest headlines about a company, from Yahoo's search (free, no key).
-    static func news(_ symbol: String) async -> [StockHeadline] {
-        var c = URLComponents(string: "https://query2.finance.yahoo.com/v1/finance/search")!
-        c.queryItems = [.init(name: "q", value: symbol), .init(name: "quotesCount", value: "0"), .init(name: "newsCount", value: "8")]
-        guard let url = c.url, let result = try? await session.data(from: url),
-              let r = try? JSONDecoder().decode(SearchResponse.self, from: result.0) else { return [] }
-        return (r.news ?? []).compactMap { n in
-            guard let t = n.title, !t.isEmpty else { return nil }
-            return StockHeadline(title: t, source: n.publisher, link: n.link,
-                                 published: n.providerPublishTime.map { Date(timeIntervalSince1970: $0) })
-        }
-    }
-
-    static func chart(_ symbol: String, range: Range = .day) async throws -> Result {
-        let path = symbol.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: ".-="))) ?? symbol
-        let q = range.query
-        var hosts = ["query1", "query2"].shuffled()
-        var lastError: Error = URLError(.badServerResponse)
-        while let host = hosts.popLast() {
-            guard let url = URL(string: "https://\(host).finance.yahoo.com/v8/finance/chart/\(path)?range=\(q.range)&interval=\(q.interval)&includePrePost=false") else { break }
-            do {
-                let (data, response) = try await session.data(from: url)
-                if let http = response as? HTTPURLResponse, http.statusCode != 200 { throw URLError(.badServerResponse) }
-                let r = try JSONDecoder().decode(Response.self, from: data)
-                guard let item = r.chart.result?.first else { throw URLError(.cannotParseResponse) }
-                let m = item.meta
-                var quote = Quote(symbol: m.symbol ?? symbol)
-                quote.name = m.longName
-                quote.shortName = m.shortName
-                quote.exchange = m.fullExchangeName ?? m.exchangeName
-                quote.currency = m.currency
-                quote.price = m.regularMarketPrice
-                quote.prevClose = range == .day ? (m.previousClose ?? m.chartPreviousClose) : m.previousClose
-                quote.high = m.regularMarketDayHigh
-                quote.low = m.regularMarketDayLow
-                quote.volume = m.regularMarketVolume
-                quote.wk52High = m.fiftyTwoWeekHigh
-                quote.wk52Low = m.fiftyTwoWeekLow
-                quote.time = m.regularMarketTime
-                let closes = item.indicators.quote?.first?.close ?? []
-                let points = zip(item.timestamp ?? [], closes).compactMap { t, c in
-                    c.map { ChartPoint(time: Date(timeIntervalSince1970: t), value: $0) }
-                }
-                let now = Date.now.timeIntervalSince1970
-                let open = m.currentTradingPeriod?.regular.map { now >= $0.start && now <= $0.end } ?? false
-                quote.marketState = open ? "REGULAR" : "CLOSED"
-                return Result(quote: quote, points: points, isOpen: open)
-            } catch {
-                lastError = error
-            }
-        }
-        throw lastError
     }
 }
 
@@ -348,12 +223,6 @@ enum ChangeDisplay: String, CaseIterable {
 @MainActor
 final class StocksStore: ObservableObject {
     @Published private(set) var file: StocksFile?
-    @Published private(set) var live: [String: Quote] = [:]
-    @Published private(set) var intraday: [String: [ChartPoint]] = [:]
-    @Published private(set) var lastLive: Date?
-    /// False when Yahoo couldn't be reached on the last try, so prices come from the hourly file.
-    @Published private(set) var liveWorks = true
-    @Published private(set) var anyMarketOpen = false
     @Published private(set) var isLoading = false
     @Published private(set) var directory: [SymbolEntry] = []
     @Published var mine: [String] { didSet { UserDefaults.standard.set(mine, forKey: Self.mineKey) } }
@@ -362,7 +231,6 @@ final class StocksStore: ObservableObject {
     private var names: [String: String] { didSet { UserDefaults.standard.set(names, forKey: "stocks.names") } }
 
     private static let mineKey = "stocks.mine"
-    private var openSymbols: Set<String> = []
 
     init() {
         mine = UserDefaults.standard.stringArray(forKey: Self.mineKey) ?? []
@@ -376,43 +244,29 @@ final class StocksStore: ObservableObject {
 
     // MARK: Reading
 
-    /// The freshest quote: live from Yahoo when we have it, otherwise the hourly file.
-    func quote(_ symbol: String) -> Quote? {
-        let base = file?.quotes[symbol]
-        guard var q = live[symbol] else { return base }
-        // the file knows things the live chart doesn't: market value, P/E, dividends…
-        if let b = base {
-            let now = q.price ?? 0, then = b.price ?? 0
-            q.marketCap = b.marketCap.map { cap in then > 0 && now > 0 ? cap * now / then : cap }
-            q.pe = b.pe; q.eps = b.eps; q.divYield = b.divYield; q.avgVolume = b.avgVolume
-            if q.open == nil { q.open = b.open }
-            if q.name == nil { q.name = b.name }
-            if q.shortName == nil { q.shortName = b.shortName }
-        }
-        return q
-    }
+    /// Prices come from the ScoutAI updater, every 30 minutes on weekdays; the app never asks a
+    /// price service itself.
+    func quote(_ symbol: String) -> Quote? { file?.quotes[symbol] }
 
     func name(_ symbol: String) -> String {
         if let q = quote(symbol) { return q.displayName }
         return StockNames.known[symbol] ?? names[symbol] ?? symbol
     }
 
-    func sparkline(_ symbol: String) -> [ChartPoint] {
-        if let pts = intraday[symbol], pts.count > 1 { return pts }
-        return file?.charts[symbol]?["d1"]?.points ?? []
-    }
+    func sparkline(_ symbol: String) -> [ChartPoint] { fileChart(symbol, .day) }
 
     func summary(_ symbol: String) -> StockSummary? { file?.summaries[symbol] }
     func headlines(_ symbol: String) -> [StockHeadline] { file?.news[symbol] ?? [] }
-    func fileChart(_ symbol: String, _ range: Yahoo.Range) -> [ChartPoint] {
-        range.fileKey.flatMap { file?.charts[symbol]?[$0]?.points } ?? []
+    func fileChart(_ symbol: String, _ range: ChartRange) -> [ChartPoint] {
+        file?.charts[symbol]?[range.fileKey]?.points ?? []
     }
 
+    /// "Prices every 30 minutes · last at 14:42", or the day for older ones.
     var updatedText: String {
-        if anyMarketOpen, liveWorks, lastLive != nil { return "Live · markets open" }
-        if let l = lastLive, liveWorks { return "Updated \(Format.ago(l).lowercased()) · markets closed" }
-        if let p = file?.pricesUpdated { return "Prices from \(Format.ago(p).lowercased())" }
-        return "Loading prices…"
+        guard let p = file?.pricesUpdated else { return "Prices every 30 minutes" }
+        let when = Calendar.current.isDateInToday(p) ? Format.time(p)
+            : p.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+        return "Prices every 30 minutes · last at \(when)"
     }
 
     // MARK: Updating
@@ -427,51 +281,18 @@ final class StocksStore: ObservableObject {
 
     func refreshFile() async {
         lastFileFetch = .now
-        guard let data = try? await Feed.fetch(Feed.stocks) else { return }
+        isLoading = true
+        defer { isLoading = false }
+        guard let data = await Feed.fetchStocks() else { return }
         let decoded = await Task.detached(priority: .userInitiated) { try? Feed.decoder.decode(StocksFile.self, from: data) }.value
         if let decoded { file = decoded }
     }
 
-    /// Live prices for these symbols, a few at a time.
-    func refreshLive(_ symbols: [String]) async {
-        let list = Array(Set(symbols))
-        guard !list.isEmpty else { return }
-        isLoading = true
-        defer { isLoading = false }
-        var results: [String: Yahoo.Result] = [:]
-        await withTaskGroup(of: (String, Yahoo.Result?).self) { group in
-            var index = 0
-            while index < min(6, list.count) {
-                let s = list[index]
-                group.addTask { (s, try? await Yahoo.chart(s)) }
-                index += 1
-            }
-            for await (s, r) in group {
-                if let r { results[s] = r }
-                if index < list.count {
-                    let s2 = list[index]
-                    group.addTask { (s2, try? await Yahoo.chart(s2)) }
-                    index += 1
-                }
-            }
-        }
-        for (s, r) in results {
-            live[s] = r.quote
-            if r.points.count > 1 { intraday[s] = r.points }
-            if r.isOpen { openSymbols.insert(s) } else { openSymbols.remove(s) }
-        }
-        liveWorks = !results.isEmpty
-        anyMarketOpen = !openSymbols.isEmpty
-        if !results.isEmpty { lastLive = .now }
-    }
-
-    /// Keeps prices live while a stocks page is on screen: every minute while a market is open,
-    /// every five minutes otherwise. Cancelled when the page goes away.
-    func keepLive(_ symbols: @escaping @MainActor () -> [String]) async {
+    /// While a stocks page is open, looks for the next 30-minute update every five minutes.
+    func keepFresh() async {
         while !Task.isCancelled {
-            await refreshLive(symbols())
-            let wait: Double = anyMarketOpen && liveWorks ? 60 : 300
-            try? await Task.sleep(for: .seconds(wait))
+            await refreshFileIfStale()
+            try? await Task.sleep(for: .seconds(5 * 60))
         }
     }
 
@@ -485,13 +306,13 @@ final class StocksStore: ObservableObject {
         mine.append(s)
         if let name { names[s] = name }
         Task {
-            await refreshLive([s])
             await StocksRequests.send([s])
-            // the quick server summary takes a few minutes; look for it twice
-            for wait in [240.0, 360.0] {
-                try? await Task.sleep(for: .seconds(wait))
-                if summary(s) != nil { break }
+            // its price comes with the next 30-minute update, and its summary within minutes when quick
+            // summaries are on: look for both every five minutes for up to 40 minutes
+            for _ in 0..<8 {
+                try? await Task.sleep(for: .seconds(5 * 60))
                 await refreshFile()
+                if quote(s)?.price != nil, summary(s) != nil { break }
             }
         }
     }

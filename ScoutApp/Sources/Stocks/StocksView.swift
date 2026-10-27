@@ -1,8 +1,8 @@
 import Charts
 import SwiftUI
 
-/// Markets along the top, your stocks, then the biggest US companies. Prices stay live while the
-/// page is open.
+/// Markets along the top, your stocks, then the biggest US companies. Prices update every 30 minutes
+/// on weekdays; the page picks up each update while it's open.
 struct StocksView: View {
     @EnvironmentObject private var stocks: StocksStore
     @Binding var showSettings: Bool
@@ -26,24 +26,20 @@ struct StocksView: View {
                     SectionHead(title: "Biggest in the US", detail: "by market value")
                     StockList(symbols: stocks.top, editing: false)
                 }
-                Text("Prices live from Yahoo Finance; some exchanges are delayed up to 15 minutes. Tap a change to switch between %, the price change and market value. AI summaries are written each morning. Not financial advice.")
+                Text("Prices update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Tap a change to switch between %, the price change and market value. AI summaries are written each morning. Not financial advice.")
                     .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                     .multilineTextAlignment(.center).padding(.horizontal, 20)
             }
             .storyDestinations()
             .task { await stocks.refreshFileIfStale() }
-            .task { await stocks.keepLive { stocks.mine + stocks.top + stocks.markets } }
+            .task { await stocks.keepFresh() }
             .task { await stocks.keepRequestsAlive() }
             .sheet(isPresented: $showSearch) { StockSearchView().environmentObject(stocks) }
             .onChange(of: stocks.mine.isEmpty) { _, empty in if empty { editing = false } }
         }
     }
 
-    private func refreshAll() async {
-        async let file: Void = stocks.refreshFile()
-        async let live: Void = stocks.refreshLive(stocks.mine + stocks.top + stocks.markets)
-        _ = await (file, live)
-    }
+    private func refreshAll() async { await stocks.refreshFile() }
 
     private var addPrompt: some View {
         Button { showSearch = true } label: {
@@ -311,7 +307,7 @@ struct StockSearchView: View {
                 }
                 Section {
                 } footer: {
-                    Text("Try a company or a ticker: \"Scottish Mortgage\", \"SpaceX\", \"BARC.L\". London tickers end in .L. Scout's AI writes a summary of each stock you add with the next morning update.")
+                    Text("Try a company or a ticker: \"Scottish Mortgage\", \"SpaceX\", \"BARC.L\". London tickers end in .L. A stock you add gets its price with the next update (within 30 minutes) and its AI summary soon after.")
                 }
             }
             .scrollContentBackground(.hidden)
