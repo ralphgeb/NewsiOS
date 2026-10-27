@@ -69,7 +69,9 @@ final class WeatherModel: NSObject, ObservableObject {
         defer { isLoading = false }
         let spot = await location()
         let place = await placeName(spot)
-        if let r = await Self.apple(spot, place: place) ?? (try? await Self.openMeteo(spot, place: place)) {
+        var fresh = await Self.apple(spot, place: place)
+        if fresh == nil { fresh = try? await Self.openMeteo(spot, place: place) }
+        if let r = fresh {
             report = r
             failed = false
         } else {

@@ -511,7 +511,7 @@ final class StocksStore: ObservableObject {
             scored.append((e, score))
         }
         return scored.sorted { ($0.1, -$0.0.rank, $0.0.symbol.count) < ($1.1, -$1.0.rank, $1.0.symbol.count) }
-            .prefix(40).map(\.0)
+            .prefix(40).map { $0.0 }
     }
 }
 
