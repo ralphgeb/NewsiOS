@@ -29,7 +29,8 @@ struct SettingsView: View {
     @EnvironmentObject private var weather: WeatherModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-    @AppStorage(WeekStart.key) private var weekStartsOnMonday = WeekStart.startsOnMonday
+    /// Today's hidden cards (the same setting as Edit on Today).
+    @AppStorage("today.hidden") private var hiddenCards = ""
     @AppStorage(WeatherModel.modeKey) private var weatherMode = WeatherModel.Mode.location.rawValue
     @AppStorage("links.reader") private var reader = false
     @AppStorage(Notifier.enabledKey) private var notify = false
@@ -44,9 +45,10 @@ struct SettingsView: View {
                 readingSection
                 notificationsSection
                 Section("How Scout works") {
-                    explainer("Today", "Each morning at 5:00 the ScoutAI updater reads about 100 news sites, and AI writes a front page for Tech, Finance, World and Fashion: the main events, the key stories and what to watch. Tech also gets an evening edition and Rumour watch. Pull Today down, or tap the date, for earlier days.")
+                    explainer("Today", "Each morning at 6:00 the ScoutAI updater reads about 100 news sites, and AI writes a front page for Tech, Finance, World and Fashion: the main events, the key stories and what to watch. Tech also gets an evening edition. Pull Today down to refresh.")
                     explainer("All", "Ranked by importance: how big the story is (an AI score and its market impact), how many outlets cover it, how recent it is, and a small boost for your interests. It loses half its weight every 30 hours. The sections run newest first.")
-                    explainer("Rumour odds", "For unconfirmed stories the AI weighs who is reporting it, how many outlets agree and what the companies say. Likely is 65% and up, a toss-up 35 to 64%. When a rumour comes true or is denied, it moves to Confirmed or Denied.")
+                    explainer("Rumour odds", "For unconfirmed stories the AI weighs who is reporting it, how many outlets agree and what the companies say. Likely is 65% and up, a toss-up 35 to 64%. When a rumour comes true or is denied, its label changes.")
+                    explainer("Stocks", "Prices for about 3,500 stocks, indices, currencies and cryptos update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Stocks you follow, America's biggest companies and the stocks in the news also get charts and key numbers; the ones you follow and the biggest get an AI summary each morning. Yesterday's risers and fallers are the biggest moves among large, busy companies.")
                     explainer("Market impact", "Which companies a story could move, up or down, and by how much: one dot is low, three is high. Tap a company for every story that names it.")
                 }
                 Section {
@@ -97,7 +99,7 @@ struct SettingsView: View {
         } header: {
             Text("News")
         } footer: {
-            Text("Interests rank stories higher under All. News and Today are written at 5:00 each morning, London time; Scout fetches them whenever you open it.")
+            Text("Interests rank stories higher under All. News and Today are written at 6:00 each morning, London time; Scout fetches them whenever you open it.")
         }
         .listRowBackground(Theme.card)
     }
@@ -197,20 +199,33 @@ struct SettingsView: View {
 
     private var todaySection: some View {
         Section {
-            Picker("Weather", selection: $weatherMode) {
-                ForEach(WeatherModel.Mode.allCases) { Text($0.title).tag($0.rawValue) }
+            Toggle("Weather", isOn: cardShown("weather"))
+            if !hiddenCards.split(separator: ",").contains("weather") {
+                Picker("Weather for", selection: $weatherMode) {
+                    ForEach(WeatherModel.Mode.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                .onChange(of: weatherMode) { _, _ in Task { await weather.refresh(force: true) } }
             }
-            .onChange(of: weatherMode) { _, _ in Task { await weather.refresh(force: true) } }
-            Picker("Week starts on", selection: $weekStartsOnMonday) {
-                Text("Monday").tag(true)
-                Text("Sunday").tag(false)
-            }
+            Toggle("Tube status", isOn: cardShown("tube"))
+            Toggle("Markets", isOn: cardShown("markets"))
         } header: {
-            Text("Today")
+            Text("On Today")
         } footer: {
-            Text("Weather from Apple Weather, Tube status live from TfL. Tap the Tube card to fold it away. To hide a card, or move it, tap Edit on Today.")
+            Text("Weather from Apple Weather, Tube status live from TfL. Tap the Tube card to fold it away. To move cards, or hide others, tap Edit on Today.")
         }
         .listRowBackground(Theme.card)
+    }
+
+    /// A switch for one of Today's cards, sharing Today's own list of hidden cards.
+    private func cardShown(_ card: String) -> Binding<Bool> {
+        Binding(
+            get: { !hiddenCards.split(separator: ",").contains(Substring(card)) },
+            set: { show in
+                var set = Set(hiddenCards.split(separator: ",").map(String.init))
+                if show { set.remove(card) } else { set.insert(card) }
+                withAnimation(.snappy) { hiddenCards = set.sorted().joined(separator: ",") }
+            }
+        )
     }
 
     private var readingSection: some View {
@@ -244,7 +259,7 @@ struct SettingsView: View {
         } header: {
             Text("Notifications")
         } footer: {
-            Text("A one-line teaser of your Today topic when a new briefing is written. iOS decides exactly when Scout checks, usually soon after 5:00.")
+            Text("A one-line teaser of your Today topic when a new briefing is written. iOS decides exactly when Scout checks, usually soon after 6:00.")
         }
         .listRowBackground(Theme.card)
     }

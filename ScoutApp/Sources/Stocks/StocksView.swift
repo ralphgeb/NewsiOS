@@ -8,23 +8,50 @@ struct StocksView: View {
     @Binding var showSettings: Bool
     @State private var editing = false
     @State private var showSearch = false
+    @State private var allNews = false
 
     var body: some View {
         NavigationStack {
             ScoutPage(showSettings: $showSettings, title: "Stocks", subtitle: stocks.updatedText,
                       editing: stocks.mine.isEmpty ? nil : $editing,
                       onRefresh: { await refreshAll() }, isRefreshing: stocks.isLoading) {
+                SectionHead(title: "Markets")
                 MarketsStrip()
-                SectionHead(title: "My stocks", detail: stocks.mine.isEmpty ? nil : "\(stocks.mine.count)")
+                SectionHead(title: "Your stocks", detail: stocks.mine.isEmpty ? nil : "\(stocks.mine.count)")
                 if stocks.mine.isEmpty {
                     addPrompt
                 } else {
                     StockList(symbols: stocks.mine, editing: editing)
                     if !editing { addButton }
                 }
+                if !stocks.inTheNews.isEmpty {
+                    let list = stocks.inTheNews
+                    SectionHead(title: "In the news", detail: "named in Scout's stories")
+                    StockList(symbols: allNews ? list : Array(list.prefix(8)), editing: false)
+                    if list.count > 8 {
+                        Button {
+                            withAnimation(.snappy) { allNews.toggle() }
+                        } label: {
+                            Text(allNews ? "Show fewer" : "Show all \(list.count)")
+                                .font(.system(size: 14, weight: .semibold))
+                                .frame(maxWidth: .infinity).frame(height: 40)
+                                .background(Theme.card, in: Capsule())
+                                .foregroundStyle(Theme.ink)
+                        }
+                        .buttonStyle(PressStyle())
+                    }
+                }
                 if !stocks.top.isEmpty {
-                    SectionHead(title: "Biggest in the US", detail: "by market value")
+                    SectionHead(title: "America's biggest companies", detail: "by market value")
                     StockList(symbols: stocks.top, editing: false)
+                }
+                if !stocks.movers.up.isEmpty {
+                    SectionHead(title: "Yesterday's biggest risers", detail: stocks.prices?.moversDay)
+                    MoverList(movers: stocks.movers.up)
+                }
+                if !stocks.movers.down.isEmpty {
+                    SectionHead(title: "Yesterday's biggest fallers", detail: stocks.prices?.moversDay)
+                    MoverList(movers: stocks.movers.down)
                 }
                 Text("Prices update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Tap a change to switch between %, the price change and market value. AI summaries are written each morning. Not financial advice.")
                     .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
@@ -70,6 +97,45 @@ struct StocksView: View {
                 .foregroundStyle(Theme.ink)
         }
         .buttonStyle(PressStyle())
+    }
+}
+
+/// Yesterday's risers or fallers: the company, its price and how far it moved that day.
+struct MoverList: View {
+    let movers: [PriceList.Mover]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(movers.enumerated()), id: \.element.id) { i, m in
+                NavigationLink(value: TickerRoute(ticker: m.symbol, name: m.name)) {
+                    HStack(spacing: 12) {
+                        Text("\(i + 1)").font(Theme.number(15, weight: .bold)).foregroundStyle(Theme.tertiary)
+                            .frame(width: 20, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(m.symbol).font(.system(size: 15, weight: .heavy)).foregroundStyle(Theme.ink).lineLimit(1)
+                            Text(m.name).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
+                        }
+                        Spacer(minLength: 6)
+                        Text(m.price.formatted(.number.precision(.fractionLength(m.price >= 1000 ? 0 : 2))))
+                            .font(Theme.number(14, weight: .semibold)).foregroundStyle(Theme.ink)
+                        Text((m.pct >= 0 ? "+" : "−") + abs(m.pct).formatted(.number.precision(.fractionLength(1))) + "%")
+                            .font(Theme.number(12, weight: .bold))
+                            .padding(.horizontal, 7)
+                            .frame(minWidth: 64, minHeight: 22)
+                            .background(m.pct < 0 ? Theme.accent : Theme.ink, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                            .foregroundStyle(m.pct < 0 ? Color.white : Theme.background)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressStyle())
+                if i < movers.count - 1 {
+                    Rectangle().fill(Theme.hairline).frame(height: 0.5).padding(.leading, 46)
+                }
+            }
+        }
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
 

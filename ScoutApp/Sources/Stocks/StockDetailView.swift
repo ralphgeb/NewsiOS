@@ -58,12 +58,22 @@ struct StockDetailView: View {
             }
         }
         .tint(Theme.ink)
-        .task { await prepareSummary() }
+        .task {
+            // nothing on it yet in Scout's lists: one first look from the phone
+            if stocks.quote(symbol) == nil { await stocks.fetchFirstLook(symbol) }
+            points = chartPoints(range)
+            await prepareSummary()
+        }
         // the chart follows the range and each new 30-minute update
-        .onAppear { points = stocks.fileChart(symbol, range) }
-        .onChange(of: range) { _, r in withAnimation(.snappy) { points = stocks.fileChart(symbol, r) } }
-        .onChange(of: stocks.file?.pricesUpdated) { _, _ in points = stocks.fileChart(symbol, range) }
+        .onAppear { points = chartPoints(range) }
+        .onChange(of: range) { _, r in withAnimation(.snappy) { points = chartPoints(r) } }
+        .onChange(of: stocks.file?.pricesUpdated) { _, _ in points = chartPoints(range) }
         .sheet(item: $reading) { SafariView(url: $0.url, reader: reader).ignoresSafeArea() }
+    }
+
+    private func chartPoints(_ r: ChartRange) -> [ChartPoint] {
+        let pts = stocks.fileChart(symbol, r)
+        return pts.isEmpty && r == .day ? (stocks.firstLookChart[symbol] ?? []) : pts
     }
 
     private var isCompany: Bool { !(stocks.quote(symbol)?.isIndex ?? false) && StockNames.known[symbol] == nil }
@@ -198,7 +208,9 @@ struct StockDetailView: View {
                     .chartXSelection(value: $selected)
                     .sensoryFeedback(.selection, trigger: selectedPoint?.time)
                 } else {
-                    Text(stocks.quote(symbol) == nil ? "The chart arrives with the next update, within 30 minutes." : "No chart for this range yet.")
+                    Text(stocks.isDetailed(symbol) ? "No chart for this range yet."
+                         : stocks.follows(symbol) ? "Charts arrive with the next update, within 30 minutes."
+                         : "Follow it for charts, key numbers and an AI summary.")
                         .font(.system(size: 13)).foregroundStyle(Theme.tertiary)
                         .multilineTextAlignment(.center)
                 }

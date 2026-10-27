@@ -122,14 +122,7 @@ struct TubeCard: View {
                             }
                         } else {
                             FlowLayout(spacing: 6) {
-                                ForEach(bad.prefix(5)) { line in lineChip(line) }
-                                if bad.count > 5 {
-                                    Text("+\(bad.count - 5)")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .padding(.horizontal, 9).frame(height: 26)
-                                        .background(Theme.track, in: Capsule())
-                                        .foregroundStyle(Theme.secondary)
-                                }
+                                ForEach(groups(bad)) { g in groupChip(g) }
                             }
                         }
                     }
@@ -186,20 +179,42 @@ struct TubeCard: View {
         return "\(bad.count) lines disrupted"
     }
 
-    /// A disrupted line: its colour, name and what's wrong, in one chip.
-    private func lineChip(_ line: TubeService.Line) -> some View {
-        HStack(spacing: 6) {
-            Capsule().fill(TubeService.colours[line.id] ?? Theme.ink).frame(width: 4, height: 14)
-            Text(line.name.replacingOccurrences(of: " line", with: ""))
-                .font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.ink)
-            Text(line.status)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(line.level == 2 ? Theme.accent : Theme.secondary)
+    /// Lines with the same problem together, worst first: "Minor delays" with each line's colour.
+    private struct LineGroup: Identifiable {
+        let status: String
+        let level: Int
+        let lines: [TubeService.Line]
+        var id: String { status }
+    }
+
+    private func groups(_ bad: [TubeService.Line]) -> [LineGroup] {
+        var order: [String] = []
+        var byStatus: [String: [TubeService.Line]] = [:]
+        for line in bad {
+            if byStatus[line.status] == nil { order.append(line.status) }
+            byStatus[line.status, default: []].append(line)
+        }
+        return order.map { LineGroup(status: $0, level: byStatus[$0]?.map(\.level).max() ?? 1, lines: byStatus[$0] ?? []) }
+            .sorted { $0.level > $1.level }
+    }
+
+    private func groupChip(_ g: LineGroup) -> some View {
+        HStack(spacing: 7) {
+            HStack(spacing: 3) {
+                ForEach(g.lines) { line in
+                    Circle().fill(TubeService.colours[line.id] ?? Theme.ink).frame(width: 9, height: 9)
+                }
+            }
+            Text(g.status)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(g.level == 2 ? Theme.accent : Theme.ink)
         }
         .lineLimit(1)
-        .padding(.leading, 8).padding(.trailing, 10)
+        .padding(.horizontal, 10)
         .frame(height: 26)
-        .background(line.level == 2 ? Theme.accent.opacity(0.1) : Theme.track, in: Capsule())
+        .background(g.level == 2 ? Theme.accent.opacity(0.1) : Theme.track, in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(g.status): \(g.lines.map(\.name).joined(separator: ", "))")
     }
 
     /// Every line's colour, faded when it's running well.

@@ -139,8 +139,10 @@ struct StocksFile: Decodable {
     var charts: [String: [String: Series]]
     var news: [String: [StockHeadline]]
     var summaries: [String: StockSummary]
+    /// Stocks the last three days' stories name, most-mentioned first.
+    var mentioned: [String]
 
-    enum CodingKeys: String, CodingKey { case pricesUpdated, summariesUpdated, top, benchmarks, quotes, charts, news, summaries }
+    enum CodingKeys: String, CodingKey { case pricesUpdated, summariesUpdated, top, benchmarks, quotes, charts, news, summaries, mentioned }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -152,6 +154,74 @@ struct StocksFile: Decodable {
         charts = c.lenient(.charts) ?? [:]
         news = c.lenient(.news) ?? [:]
         summaries = c.lenient(.summaries) ?? [:]
+        mentioned = c.lenient(.mentioned) ?? []
+    }
+}
+
+/// prices.json: prices for about 3,500 stocks every 30 minutes, and yesterday's risers and fallers.
+struct PriceList: Decodable {
+    struct Mover: Decodable, Identifiable, Hashable {
+        let symbol: String
+        let name: String
+        let pct: Double
+        let price: Double
+        var id: String { symbol }
+
+        // each one is a short list: [symbol, name, % change, price]
+        init(from decoder: Decoder) throws {
+            var c = try decoder.unkeyedContainer()
+            symbol = try c.decode(String.self)
+            name = try c.decode(String.self)
+            pct = try c.decode(Double.self)
+            price = try c.decode(Double.self)
+        }
+    }
+
+    struct Movers: Decodable {
+        var day: String?
+        var up: [Mover]
+        var down: [Mover]
+
+        enum CodingKeys: String, CodingKey { case day, up, down }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            day = c.lenient(.day)
+            up = c.lenientArray(.up) ?? []
+            down = c.lenientArray(.down) ?? []
+        }
+    }
+
+    var updated: Date?
+    /// symbol → [price, previous close, unix time]
+    var q: [String: [Double?]]
+    var movers: Movers?
+
+    enum CodingKeys: String, CodingKey { case updated, q, movers }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        updated = c.date(.updated)
+        q = c.lenient(.q) ?? [:]
+        movers = c.lenient(.movers)
+    }
+
+    func quote(_ symbol: String) -> Quote? {
+        guard let row = q[symbol], let price = row.first ?? nil else { return nil }
+        var quote = Quote(symbol: symbol)
+        quote.price = price
+        quote.prevClose = row.count > 1 ? row[1] : nil
+        quote.time = row.count > 2 ? row[2] : nil
+        return quote
+    }
+
+    /// "Mon 26 Oct", the day the movers are from.
+    var moversDay: String? {
+        guard let d = movers?.day else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: d)?.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
 }
 
@@ -223,6 +293,10 @@ enum ChangeDisplay: String, CaseIterable {
 @MainActor
 final class StocksStore: ObservableObject {
     @Published private(set) var file: StocksFile?
+    @Published private(set) var prices: PriceList?
+    /// A first price fetched on the phone for a stock you've just added that no list has yet.
+    @Published private(set) var firstLook: [String: Quote] = [:]
+    @Published private(set) var firstLookChart: [String: [ChartPoint]] = [:]
     @Published private(set) var isLoading = false
     @Published private(set) var directory: [SymbolEntry] = []
     @Published var mine: [String] { didSet { UserDefaults.standard.set(mine, forKey: Self.mineKey) } }
@@ -237,6 +311,7 @@ final class StocksStore: ObservableObject {
         display = ChangeDisplay(rawValue: UserDefaults.standard.string(forKey: "stocks.display") ?? "") ?? .percent
         names = (UserDefaults.standard.dictionary(forKey: "stocks.names") as? [String: String]) ?? [:]
         if let data = Feed.cached(Feed.stocks) { file = try? Feed.decoder.decode(StocksFile.self, from: data) }
+        if let data = Feed.cached(Feed.prices) { prices = try? Feed.decoder.decode(PriceList.self, from: data) }
     }
 
     var top: [String] { file?.top ?? [] }
@@ -246,14 +321,28 @@ final class StocksStore: ObservableObject {
 
     /// Prices come from the ScoutAI updater, every 30 minutes on weekdays; the app never asks a
     /// price service itself.
-    func quote(_ symbol: String) -> Quote? { file?.quotes[symbol] }
-
-    func name(_ symbol: String) -> String {
-        if let q = quote(symbol) { return q.displayName }
-        return StockNames.known[symbol] ?? names[symbol] ?? symbol
+    /// The detailed list first, then the wide one, then a first look fetched on the phone.
+    func quote(_ symbol: String) -> Quote? {
+        file?.quotes[symbol] ?? prices?.quote(symbol) ?? firstLook[symbol]
     }
 
-    func sparkline(_ symbol: String) -> [ChartPoint] { fileChart(symbol, .day) }
+    func name(_ symbol: String) -> String {
+        if let q = file?.quotes[symbol] { return q.displayName }
+        if let n = StockNames.known[symbol] ?? names[symbol] { return n }
+        if let m = (movers.up + movers.down).first(where: { $0.symbol == symbol }) { return m.name }
+        return firstLook[symbol]?.displayName ?? symbol
+    }
+
+    func sparkline(_ symbol: String) -> [ChartPoint] {
+        let pts = fileChart(symbol, .day)
+        return pts.isEmpty ? (firstLookChart[symbol] ?? []) : pts
+    }
+
+    /// Stocks named in the latest stories.
+    var inTheNews: [String] { file?.mentioned ?? [] }
+    var movers: (up: [PriceList.Mover], down: [PriceList.Mover]) { (prices?.movers?.up ?? [], prices?.movers?.down ?? []) }
+    /// Whether the detailed list has it (charts, numbers, AI summary), not just a price.
+    func isDetailed(_ symbol: String) -> Bool { file?.quotes[symbol] != nil }
 
     func summary(_ symbol: String) -> StockSummary? { file?.summaries[symbol] }
     func headlines(_ symbol: String) -> [StockHeadline] { file?.news[symbol] ?? [] }
@@ -283,9 +372,27 @@ final class StocksStore: ObservableObject {
         lastFileFetch = .now
         isLoading = true
         defer { isLoading = false }
-        guard let data = await Feed.fetchStocks() else { return }
-        let decoded = await Task.detached(priority: .userInitiated) { try? Feed.decoder.decode(StocksFile.self, from: data) }.value
-        if let decoded { file = decoded }
+        async let detailed = Feed.fetchStocks()
+        async let wide = Feed.fetchFromService(Feed.prices)
+        let (d, w) = await (detailed, wide)
+        let decoded = await Task.detached(priority: .userInitiated) { () -> (StocksFile?, PriceList?) in
+            (d.flatMap { try? Feed.decoder.decode(StocksFile.self, from: $0) }, w.flatMap { try? Feed.decoder.decode(PriceList.self, from: $0) })
+        }.value
+        if let f = decoded.0 { file = f }
+        if let p = decoded.1 { prices = p }
+        // a first look is only needed until a list has the stock
+        for s in firstLook.keys where file?.quotes[s] != nil || prices?.q[s] != nil {
+            firstLook[s] = nil
+            firstLookChart[s] = nil
+        }
+    }
+
+    /// For a stock you've just added that neither list has yet: one look at Yahoo from the phone, so
+    /// it isn't blank until the next 30-minute update takes over.
+    func fetchFirstLook(_ symbol: String) async {
+        guard quote(symbol) == nil, let r = await FirstLook.fetch(symbol) else { return }
+        firstLook[symbol] = r.quote
+        firstLookChart[symbol] = r.points
     }
 
     /// While a stocks page is open, looks for the next 30-minute update every five minutes.
@@ -306,6 +413,7 @@ final class StocksStore: ObservableObject {
         mine.append(s)
         if let name { names[s] = name }
         Task {
+            await fetchFirstLook(s)
             await StocksRequests.send([s])
             // its price comes with the next 30-minute update, and its summary within minutes when quick
             // summaries are on: look for both every five minutes for up to 40 minutes

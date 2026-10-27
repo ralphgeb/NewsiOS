@@ -59,19 +59,24 @@ enum Feed {
         return data
     }
 
+    static let prices = "prices.json"
+
     /// stocks.json lives on the Scout service (updated every 30 minutes); GitHub's copy is the fallback.
     static func fetchStocks() async -> Data? {
-        if let s = Bundle.main.object(forInfoDictionaryKey: "ScoutStocksURL") as? String, let base = URL(string: s) {
-            var request = URLRequest(url: base.appending(path: stocks))
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.timeoutInterval = 30
-            if let result = try? await URLSession.shared.data(for: request),
-               (result.1 as? HTTPURLResponse)?.statusCode == 200 {
-                try? result.0.write(to: cacheURL(stocks), options: .atomic)
-                return result.0
-            }
-        }
+        if let data = await fetchFromService(stocks) { return data }
         return try? await fetch(stocks)
+    }
+
+    /// A file the ScoutAI updater publishes to the Scout service (stocks.json, prices.json).
+    static func fetchFromService(_ name: String) async -> Data? {
+        guard let s = Bundle.main.object(forInfoDictionaryKey: "ScoutStocksURL") as? String, let base = URL(string: s) else { return nil }
+        var request = URLRequest(url: base.appending(path: name))
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 30
+        guard let result = try? await URLSession.shared.data(for: request),
+              (result.1 as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        try? result.0.write(to: cacheURL(name), options: .atomic)
+        return result.0
     }
 
     static func cached(_ name: String) -> Data? {
@@ -142,7 +147,7 @@ struct BriefingDigest: Hashable {
 
     static let sample = BriefingDigest(
         topic: .tech, label: "Morning tech briefing",
-        title: "Your briefing arrives at 5:00 each morning",
+        title: "Your briefing arrives at 6:00 each morning",
         teaser: nil, summary: "The day's biggest stories, read and summarised for you.",
         lines: ["Top stories with pictures", "Rumour watch with the odds", "Companies to watch"],
         generated: .now, id: "sample")
