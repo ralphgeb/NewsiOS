@@ -31,7 +31,7 @@ struct StocksView: View {
                     .multilineTextAlignment(.center).padding(.horizontal, 20)
             }
             .storyDestinations()
-            .task { await stocks.refreshFile() }
+            .task { await stocks.refreshFileIfStale() }
             .task { await stocks.keepLive { stocks.mine + stocks.top + stocks.markets } }
             .task { await stocks.keepRequestsAlive() }
             .sheet(isPresented: $showSearch) { StockSearchView().environmentObject(stocks) }

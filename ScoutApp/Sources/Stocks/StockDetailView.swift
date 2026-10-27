@@ -12,6 +12,11 @@ struct StockDetailView: View {
     @State private var loadingChart = false
     @State private var selected: Date?
     @State private var reading: WebLink?
+    /// Headlines fetched live, for stocks the morning update hasn't covered yet.
+    @State private var liveNews: [StockHeadline] = []
+    /// Apple Intelligence's quick summary, until Scout's own arrives.
+    @State private var localSummary: OnDeviceSummary.Result?
+    @State private var writing = false
     @AppStorage("links.reader") private var reader = false
 
     private var symbol: String { route.ticker }
@@ -57,15 +62,35 @@ struct StockDetailView: View {
         }
         .tint(Theme.ink)
         .task(id: range) { await loadChart() }
+        .task { await prepareSummary() }
         .task {
             // keep the price live while the page is open
             while !Task.isCancelled {
                 await stocks.refreshLive([symbol])
                 if range == .day, let pts = stocks.intraday[symbol], pts.count > 1 { points = pts }
-                try? await Task.sleep(for: .seconds(stocks.anyMarketOpen ? 20 : 300))
+                try? await Task.sleep(for: .seconds(stocks.anyMarketOpen ? 60 : 300))
             }
         }
         .sheet(item: $reading) { SafariView(url: $0.url, reader: reader).ignoresSafeArea() }
+    }
+
+    private var isCompany: Bool { !(stocks.quote(symbol)?.isIndex ?? false) && StockNames.known[symbol] == nil }
+
+    /// Fresh headlines and, if Scout has no summary yet, a quick one from Apple Intelligence.
+    private func prepareSummary() async {
+        await stocks.refreshFileIfStale()
+        if stocks.headlines(symbol).isEmpty { liveNews = await Yahoo.news(symbol) }
+        guard isCompany, stocks.summary(symbol) == nil, localSummary == nil, OnDeviceSummary.isAvailable else { return }
+        writing = true
+        defer { writing = false }
+        let month = stocks.fileChart(symbol, .month)
+        let monthChange = month.first.flatMap { first in stocks.quote(symbol)?.price.map { ($0 - first.value) / first.value * 100 } }
+        let q = stocks.quote(symbol)
+        let result = await OnDeviceSummary.write(
+            name: q?.displayName ?? route.name ?? symbol, symbol: symbol, quote: q, monthChange: monthChange,
+            headlines: stocks.headlines(symbol).isEmpty ? liveNews : stocks.headlines(symbol),
+            stories: store.stories(mentioning: symbol))
+        withAnimation(.snappy) { localSummary = result }
     }
 
     private func loadChart() async {
@@ -285,12 +310,33 @@ struct StockDetailView: View {
                 }
             }
             .scoutCard()
-        } else if !(stocks.quote(symbol)?.isIndex ?? false), StockNames.known[symbol] == nil {
+        } else if let l = localSummary {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "apple.intelligence").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.accent)
+                    Text("What's happening").scoutLabel()
+                }
+                if let h = l.headline {
+                    Text(h).font(Theme.headline(20, weight: .heavy)).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
+                }
+                Text(l.text).font(.system(size: 15)).foregroundStyle(Theme.ink.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+                Text("Written on this iPhone by Apple Intelligence. Scout's own summary replaces it once it's ready.")
+                    .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.tertiary)
+            }
+            .scoutCard()
+            .transition(.opacity)
+        } else if writing {
+            HStack(spacing: 12) {
+                ProgressView().controlSize(.small)
+                Text("Writing a quick summary on this iPhone…").font(.system(size: 14)).foregroundStyle(Theme.secondary)
+            }
+            .scoutCard(padding: 16)
+        } else if isCompany {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles").foregroundStyle(Theme.accent)
                 Text(stocks.follows(symbol)
-                     ? "Scout's AI will write a summary of \(symbol) with the next morning update."
-                     : "Follow \(symbol) and Scout's AI will write a summary of it each morning.")
+                     ? "Scout's AI is writing a summary of \(symbol). It usually arrives within minutes."
+                     : "Follow \(symbol) and Scout's AI will write a summary of it.")
                     .font(.system(size: 14)).foregroundStyle(Theme.secondary)
             }
             .scoutCard(padding: 16)
@@ -299,7 +345,7 @@ struct StockDetailView: View {
 
     @ViewBuilder
     private var headlines: some View {
-        let list = stocks.headlines(symbol)
+        let list = stocks.headlines(symbol).isEmpty ? liveNews : stocks.headlines(symbol)
         if !list.isEmpty {
             SectionHead(title: "Headlines", detail: "\(list.count)")
             VStack(spacing: 0) {

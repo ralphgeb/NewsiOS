@@ -104,6 +104,13 @@ struct StockHeadline: Decodable, Hashable {
         link = c.lenient(.link)
         published = c.date(.published)
     }
+
+    init(title: String, source: String?, link: String?, published: Date?) {
+        self.title = title
+        self.source = source
+        self.link = link
+        self.published = published
+    }
 }
 
 struct StockSummary: Decodable, Hashable {
@@ -222,6 +229,29 @@ enum Yahoo {
         config.httpAdditionalHeaders = ["User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"]
         return URLSession(configuration: config)
     }()
+
+    private struct SearchResponse: Decodable {
+        struct Item: Decodable {
+            let title: String?
+            let publisher: String?
+            let link: String?
+            let providerPublishTime: Double?
+        }
+        let news: [Item]?
+    }
+
+    /// The latest headlines about a company, from Yahoo's search (free, no key).
+    static func news(_ symbol: String) async -> [StockHeadline] {
+        var c = URLComponents(string: "https://query2.finance.yahoo.com/v1/finance/search")!
+        c.queryItems = [.init(name: "q", value: symbol), .init(name: "quotesCount", value: "0"), .init(name: "newsCount", value: "8")]
+        guard let url = c.url, let result = try? await session.data(from: url),
+              let r = try? JSONDecoder().decode(SearchResponse.self, from: result.0) else { return [] }
+        return (r.news ?? []).compactMap { n in
+            guard let t = n.title, !t.isEmpty else { return nil }
+            return StockHeadline(title: t, source: n.publisher, link: n.link,
+                                 published: n.providerPublishTime.map { Date(timeIntervalSince1970: $0) })
+        }
+    }
 
     static func chart(_ symbol: String, range: Range = .day) async throws -> Result {
         let path = symbol.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: ".-="))) ?? symbol
@@ -387,7 +417,16 @@ final class StocksStore: ObservableObject {
 
     // MARK: Updating
 
+    private var lastFileFetch: Date?
+
+    /// Fetches stocks.json again when the copy we have is more than a few minutes old.
+    func refreshFileIfStale() async {
+        if let last = lastFileFetch, Date.now.timeIntervalSince(last) < 3 * 60 { return }
+        await refreshFile()
+    }
+
     func refreshFile() async {
+        lastFileFetch = .now
         guard let data = try? await Feed.fetch(Feed.stocks) else { return }
         let decoded = await Task.detached(priority: .userInitiated) { try? Feed.decoder.decode(StocksFile.self, from: data) }.value
         if let decoded { file = decoded }
@@ -426,12 +465,12 @@ final class StocksStore: ObservableObject {
         if !results.isEmpty { lastLive = .now }
     }
 
-    /// Keeps prices live while a stocks page is on screen: every 20 seconds while a market is open,
+    /// Keeps prices live while a stocks page is on screen: every minute while a market is open,
     /// every five minutes otherwise. Cancelled when the page goes away.
     func keepLive(_ symbols: @escaping @MainActor () -> [String]) async {
         while !Task.isCancelled {
             await refreshLive(symbols())
-            let wait: Double = anyMarketOpen && liveWorks ? 20 : 300
+            let wait: Double = anyMarketOpen && liveWorks ? 60 : 300
             try? await Task.sleep(for: .seconds(wait))
         }
     }
@@ -448,6 +487,12 @@ final class StocksStore: ObservableObject {
         Task {
             await refreshLive([s])
             await StocksRequests.send([s])
+            // the quick server summary takes a few minutes; look for it twice
+            for wait in [240.0, 360.0] {
+                try? await Task.sleep(for: .seconds(wait))
+                if summary(s) != nil { break }
+                await refreshFile()
+            }
         }
     }
 
