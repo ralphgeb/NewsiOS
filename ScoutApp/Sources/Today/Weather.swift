@@ -71,7 +71,10 @@ final class WeatherModel: NSObject, ObservableObject {
         defer { isLoading = false }
         let spot = await location()
         let place = await placeName(spot)
-        var fresh = await Self.apple(spot, place: place)
+        // the shared copy for this area first, then Apple Weather on the phone, then Open-Meteo
+        let tz = mode == .london ? "Europe/London" : TimeZone.current.identifier
+        var fresh = await Self.shared(spot, place: place, timeZone: tz)
+        if fresh == nil { fresh = await Self.apple(spot, place: place) }
         if fresh == nil { fresh = try? await Self.openMeteo(spot, place: place) }
         if let r = fresh {
             report = r
@@ -115,6 +118,37 @@ final class WeatherModel: NSObject, ObservableObject {
 
     // MARK: Sources
 
+    private struct SharedWeather: Decodable {
+        struct Now: Decodable { let temp: Double; let cond: String; let day: Bool }
+        struct HourJSON: Decodable { let t: String; let temp: Double; let cond: String; let day: Bool; let rain: Int }
+        let current: Now
+        let high: Double?
+        let low: Double?
+        let rain: Int?
+        let hours: [HourJSON]
+    }
+
+    /// The Scout service's copy for this area: Apple Weather fetched once every 30 minutes and shared
+    /// by everyone nearby, so the phones make far fewer WeatherKit calls.
+    private static func shared(_ spot: CLLocation, place: String, timeZone: String) async -> Report? {
+        guard let base = StocksRequests.url,
+              var c = URLComponents(url: base.appending(path: "weather"), resolvingAgainstBaseURL: false) else { return nil }
+        c.queryItems = [
+            .init(name: "lat", value: String(format: "%.3f", spot.coordinate.latitude)),
+            .init(name: "lon", value: String(format: "%.3f", spot.coordinate.longitude)),
+            .init(name: "tz", value: timeZone),
+        ]
+        guard let url = c.url, let result = try? await URLSession.shared.data(from: url),
+              (result.1 as? HTTPURLResponse)?.statusCode == 200,
+              let w = try? JSONDecoder().decode(SharedWeather.self, from: result.0) else { return nil }
+        let hours = w.hours.compactMap { h in
+            ISODate.parse(h.t).map { Hour(time: $0, temperature: h.temp, code: wmoCode(h.cond), isDay: h.day, rainChance: h.rain) }
+        }
+        guard !hours.isEmpty else { return nil }
+        return Report(place: place, temperature: w.current.temp, code: wmoCode(w.current.cond), isDay: w.current.day,
+                      high: w.high, low: w.low, rainChance: w.rain, hours: hours, fetched: .now, fromApple: true)
+    }
+
     /// One WeatherKit call: now, the next 24 hours and today's high and low.
     private static func apple(_ spot: CLLocation, place: String) async -> Report? {
         do {
@@ -122,12 +156,12 @@ final class WeatherModel: NSObject, ObservableObject {
             let start = Date.now.addingTimeInterval(-3600)
             let hours = hourly.forecast.filter { $0.date > start }.prefix(25).map {
                 Hour(time: $0.date, temperature: $0.temperature.converted(to: .celsius).value,
-                     code: wmoCode($0.condition), isDay: $0.isDaylight,
+                     code: wmoCode($0.condition.rawValue), isDay: $0.isDaylight,
                      rainChance: Int(($0.precipitationChance * 100).rounded()))
             }
             let today = daily.forecast.first
             return Report(place: place, temperature: now.temperature.converted(to: .celsius).value,
-                          code: wmoCode(now.condition), isDay: now.isDaylight,
+                          code: wmoCode(now.condition.rawValue), isDay: now.isDaylight,
                           high: today?.highTemperature.converted(to: .celsius).value,
                           low: today?.lowTemperature.converted(to: .celsius).value,
                           rainChance: today.map { Int(($0.precipitationChance * 100).rounded()) },
@@ -138,8 +172,8 @@ final class WeatherModel: NSObject, ObservableObject {
     }
 
     /// The calendar app's mapping from WeatherKit conditions to the codes the icons use.
-    private static func wmoCode(_ condition: WeatherCondition) -> Int {
-        switch condition.rawValue {
+    private static func wmoCode(_ condition: String) -> Int {
+        switch condition {
         case "clear", "hot", "frigid": return 0
         case "mostlyClear": return 1
         case "partlyCloudy": return 2

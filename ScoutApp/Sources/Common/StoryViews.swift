@@ -23,6 +23,17 @@ extension View {
 }
 
 extension Format {
+    /// "Morning briefing compiled at 05:13", "Briefing compiled yesterday at 17:02" or "… Mon at 05:13"
+    static func compiled(_ date: Date) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(date) {
+            let h = cal.component(.hour, from: date)
+            return "\(h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening") briefing compiled at \(time(date))"
+        }
+        if cal.isDateInYesterday(date) { return "Briefing compiled yesterday at \(time(date))" }
+        return "Briefing compiled \(date.formatted(.dateTime.weekday(.abbreviated))) at \(time(date))"
+    }
+
     /// "Just now", "12m ago", "3h ago", "Yesterday", "4d ago"
     static func ago(_ date: Date?) -> String {
         guard let date, date != .distantPast else { return "" }

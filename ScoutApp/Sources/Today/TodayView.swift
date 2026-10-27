@@ -60,7 +60,7 @@ struct TodayView: View {
     private var subtitle: String {
         let day = Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))
         guard let u = store.updated else { return day }
-        return "\(day) · updated \(Format.ago(u).lowercased())"
+        return Calendar.current.isDateInToday(u) ? "\(day) · compiled at \(Format.time(u))" : day
     }
 
     // MARK: Order and hiding
