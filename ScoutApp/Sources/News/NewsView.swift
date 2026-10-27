@@ -1,8 +1,7 @@
 import SwiftUI
 
 /// Every story from all the sites. All is ranked by importance; Tech, Finance, World and Fashion
-/// open with that section's front page and then run newest first; Rumours has the AI's odds.
-/// Swipe sideways between sections.
+/// open with that section's front page and then run newest first. Swipe sideways between sections.
 struct NewsView: View {
     @EnvironmentObject private var store: NewsStore
     @Binding var showSettings: Bool
@@ -10,8 +9,6 @@ struct NewsView: View {
     @State private var limit = 40
     @State private var forward = true
     @State private var showInterests = false
-    /// When you last looked at Rumours, for the badge of new ones on its chip.
-    @AppStorage("rumours.seen") private var rumoursSeen = Date.now.timeIntervalSince1970
 
     private var section: NewsSection { NewsSection(rawValue: sectionRaw) ?? .all }
 
@@ -23,8 +20,7 @@ struct NewsView: View {
         NavigationStack {
             ScoutPage(showSettings: $showSettings, title: "News", subtitle: subtitle, pinnedHeight: 50,
                       onRefresh: { await store.refresh() }, isRefreshing: store.isLoading) {
-                CapsuleSwitcher(items: NewsSection.allCases, selection: sectionBinding, title: \.rawValue,
-                                badge: { $0 == .rumours && section != .rumours ? newRumours : 0 })
+                CapsuleSwitcher(items: NewsSection.allCases, selection: sectionBinding, title: \.rawValue)
                     .frame(height: 46)
                     .padding(.bottom, 4)
             } content: {
@@ -43,11 +39,6 @@ struct NewsView: View {
         }
     }
 
-    private var newRumours: Int {
-        let seen = Date(timeIntervalSince1970: rumoursSeen)
-        return store.stories.filter { $0.isRumour && ($0.firstSeen ?? .distantPast) > seen }.count
-    }
-
     private var subtitle: String {
         guard let u = store.updated else { return store.isLoading ? "Loading…" : "Waiting for the first update" }
         return "Updated \(Format.ago(u).lowercased())"
@@ -57,7 +48,6 @@ struct NewsView: View {
         guard next != section else { return }
         let all = NewsSection.allCases
         forward = (all.firstIndex(of: next) ?? 0) > (all.firstIndex(of: section) ?? 0)
-        if next == .rumours || section == .rumours { rumoursSeen = Date.now.timeIntervalSince1970 }
         withAnimation(.snappy) {
             sectionRaw = next.rawValue
             limit = 40
@@ -79,13 +69,11 @@ struct NewsView: View {
 
     @ViewBuilder
     private func page(_ section: NewsSection) -> some View {
-        let all = section == .rumours ? [] : store.newsItems(section)
+        let all = store.newsItems(section)
         let items = Array(all.prefix(limit))
         let seq = items.map(\.id)
         VStack(spacing: 14) {
-            if section == .rumours {
-                RumoursSection()
-            } else if store.stories.isEmpty {
+            if store.stories.isEmpty {
                 if store.isLoading {
                     ProgressView().padding(.vertical, 60)
                 } else {

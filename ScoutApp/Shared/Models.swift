@@ -88,7 +88,6 @@ struct Story: Codable, Identifiable, Hashable {
     }
 
     var isRumour: Bool { status == "rumour" }
-    var rumourStatus: RumourStatus? { status.flatMap(RumourStatus.init(rawValue:)) }
 
     /// 0...100, with confirmed stories at 100.
     var odds: Int? {
@@ -112,18 +111,6 @@ struct Story: Codable, Identifiable, Hashable {
     static func web(_ s: String?) -> URL? {
         guard let s, s.lowercased().hasPrefix("http"), let u = URL(string: s) else { return nil }
         return u
-    }
-}
-
-enum RumourStatus: String, CaseIterable, Identifiable {
-    case rumour, confirmed, denied
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .rumour: return "Open"
-        case .confirmed: return "Confirmed"
-        case .denied: return "Denied"
-        }
     }
 }
 

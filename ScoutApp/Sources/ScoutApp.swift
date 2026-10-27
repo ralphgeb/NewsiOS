@@ -90,7 +90,6 @@ struct RootView: View {
     @State private var showSettings = false
     @State private var showTopics = !Shared.hasChosenTopic
     @State private var tab = 0
-    @AppStorage("news.section") private var newsSection = NewsSection.all.rawValue
 
     var body: some View {
         TabView(selection: $tab) {
@@ -133,13 +132,10 @@ struct RootView: View {
                 .preferredColorScheme(look.appearance.mode.colorScheme)
         }
         .onOpenURL { url in
-            // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://rumours, scout://saved
+            // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://saved
             switch url.host {
             case "news": tab = 1
             case "stocks": tab = 2
-            case "rumours":
-                newsSection = NewsSection.rumours.rawValue
-                tab = 1
             case "saved": tab = 3
             default: tab = 0
             }

@@ -75,7 +75,6 @@ struct TodayView: View {
         switch card {
         case .weather, .tube, .markets, .cover: return true
         case .top: return !page.items.isEmpty
-        case .rumours: return !page.rumours.isEmpty
         case .movers: return !page.movers.isEmpty
         case .brief: return !page.brief.isEmpty
         case .more: return !page.more.isEmpty
@@ -219,7 +218,6 @@ struct TodayView: View {
         }
         add(page.cover?.id)
         for item in page.items { add(item.story?.id) }
-        for r in page.rumours { add(r.story.id) }
         for item in page.brief { add(item.story?.id) }
         for s in page.more { add(s.id) }
         return ids
@@ -234,7 +232,6 @@ struct TodayView: View {
         case .markets: MarketsCard()
         case .cover: CoverCard(page: page, sequence: seq, editionID: $editionID)
         case .top: TopStoriesCard(items: page.items, sequence: seq, title: page.isWritten ? "Top stories" : "Key stories")
-        case .rumours: RumourWatchCard(items: page.rumours, sequence: seq)
         case .movers: MoversCard(title: page.moversTitle, movers: page.movers)
         case .brief: InBriefCard(items: page.brief, sequence: seq)
         case .more: MoreCard(title: "More in \(store.topic.title)", stories: page.more, sequence: seq)
@@ -294,7 +291,7 @@ struct CardHeightsKey: PreferenceKey {
 
 /// The cards on Today, in their default order.
 enum TodayCard: String, CaseIterable, Identifiable {
-    case weather, tube, cover, markets, top, rumours, movers, brief, more
+    case weather, tube, cover, markets, top, movers, brief, more
 
     var id: String { rawValue }
 
@@ -305,7 +302,6 @@ enum TodayCard: String, CaseIterable, Identifiable {
         case .markets: return "Markets"
         case .cover: return "Briefing"
         case .top: return "Top stories"
-        case .rumours: return "Rumour watch"
         case .movers: return "Companies to watch"
         case .brief: return "In brief"
         case .more: return "More stories"
@@ -517,57 +513,6 @@ struct NumberedHero: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-}
-
-/// Rumours in the briefing, side by side, each with the AI's odds.
-struct RumourWatchCard: View {
-    let items: [FrontPage.RumourItem]
-    let sequence: [String]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHead(title: "Rumour watch", detail: "\(items.count)")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(items) { r in
-                        NavigationLink(value: StoryRoute(id: r.story.id, sequence: sequence)) {
-                            VStack(alignment: .leading, spacing: 0) {
-                                StoryImage(story: r.story)
-                                    .frame(height: 120)
-                                    .overlay(alignment: .topTrailing) {
-                                        if r.story.isRumour, let p = r.story.odds {
-                                            Text("\(p)%")
-                                                .font(Theme.number(13, weight: .bold))
-                                                .padding(.horizontal, 9).frame(height: 24)
-                                                .background(.black.opacity(0.55), in: Capsule())
-                                                .foregroundStyle(.white)
-                                                .padding(10)
-                                        }
-                                    }
-                                VStack(alignment: .leading, spacing: 8) {
-                                    OddsBar(story: r.story)
-                                    Text(r.story.claim ?? r.story.title)
-                                        .font(Theme.headline(15)).foregroundStyle(Theme.ink).lineLimit(3)
-                                        .multilineTextAlignment(.leading)
-                                    if let note = r.note {
-                                        Text(note).font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(3)
-                                            .multilineTextAlignment(.leading)
-                                    }
-                                    Spacer(minLength: 0)
-                                }
-                                .padding(14)
-                            }
-                            .frame(width: 260, height: 330, alignment: .top)
-                            .background(Theme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        }
-                        .buttonStyle(PressStyle())
-                    }
-                }
-            }
-            .scrollClipDisabled()
-        }
     }
 }
 

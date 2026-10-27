@@ -3,24 +3,10 @@ import WidgetKit
 
 /// The sections along the top of News.
 enum NewsSection: String, CaseIterable, Identifiable {
-    case all = "All", tech = "Tech", finance = "Finance", world = "World", fashion = "Fashion", rumours = "Rumours"
+    case all = "All", tech = "Tech", finance = "Finance", world = "World", fashion = "Fashion"
 
     var id: String { rawValue }
     var topic: Topic? { Topic(rawValue: rawValue) }
-}
-
-enum RumourSort: String, CaseIterable, Identifiable {
-    case latest, likely, unlikely, impact
-
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .latest: return "Latest"
-        case .likely: return "Most likely"
-        case .unlikely: return "Least likely"
-        case .impact: return "Biggest impact"
-        }
-    }
 }
 
 /// Today's front page for one day: a written briefing when there is one, or else the day's
@@ -176,19 +162,6 @@ final class NewsStore: ObservableObject {
         let scores = Dictionary(fresh.map { ($0.id, rankScore($0, now: now)) }, uniquingKeysWith: { a, _ in a })
         return fresh.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) }
     }
-
-    func rumours(_ status: RumourStatus, sort: RumourSort) -> [Story] {
-        let list = stories.filter { $0.status == status.rawValue }
-        switch sort {
-        case .latest: return list.sorted { $0.updated > $1.updated }
-        case .likely: return list.sorted { ($0.likelihood ?? 0) > ($1.likelihood ?? 0) }
-        case .unlikely: return list.sorted { ($0.likelihood ?? 100) < ($1.likelihood ?? 100) }
-        case .impact:
-            return list.sorted { ($0.impactLevel, $0.updated) > ($1.impactLevel, $1.updated) }
-        }
-    }
-
-    var openRumourCount: Int { stories.filter(\.isRumour).count }
 
     /// Every story that names a company, newest first.
     func stories(mentioning ticker: String) -> [Story] {
