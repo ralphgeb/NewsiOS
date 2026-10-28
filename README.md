@@ -1,6 +1,6 @@
 # Scout
 
-The native iPhone app for ScoutAI: your morning briefing on tech, finance, world and fashion news, with live stocks, built in the same style as Halo and the calendar widget app: the same palettes and settings, type, cards and interactions. The icon and the default **Scout** colours come from ScoutAI.
+The native iPhone app for ScoutAI: your morning briefing on tech, finance, world and fashion news, with live stocks, built in the same style as Halo and the calendar widget app: the same palettes and settings, type, cards and interactions. The icon (a hub of connected nodes, with ScoutAI's red dot) and the default **Scout** colours come from ScoutAI.
 
 - **Today**: the front page for your topic (Tech, Finance, World or Fashion): a cover with the headline over the lead picture, the AI overview, the top stories, the companies to watch and In brief. Tech has a morning and an evening edition. Weather (Apple WeatherKit, the next 24 hours), live metro status for London, New York or Paris (tap to fold it into one line) and the markets sit at the top.
   - Tap **Edit** to drag cards into your own order, or hide the ones you don't want, as on Halo's Today.
