@@ -305,7 +305,7 @@ enum TodayCard: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .weather: return "Weather"
-        case .tube: return "Tube status"
+        case .tube: return "Metro status"
         case .markets: return "Markets"
         case .cover: return "Briefing"
         case .top: return "Top stories"

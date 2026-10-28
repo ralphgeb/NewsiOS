@@ -122,6 +122,7 @@ struct RootView: View {
                 .environmentObject(store)
                 .environmentObject(look)
                 .environmentObject(weather)
+                .environmentObject(tube)
                 .preferredColorScheme(look.appearance.mode.colorScheme)
         }
         .sheet(isPresented: $showTopics) {

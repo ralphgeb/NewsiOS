@@ -27,11 +27,13 @@ struct SettingsView: View {
     @EnvironmentObject private var store: NewsStore
     @EnvironmentObject private var look: AppearanceStore
     @EnvironmentObject private var weather: WeatherModel
+    @EnvironmentObject private var tube: TubeService
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     /// Today's hidden cards (the same setting as Edit on Today).
     @AppStorage("today.hidden") private var hiddenCards = ""
     @AppStorage(WeatherModel.modeKey) private var weatherMode = WeatherModel.Mode.location.rawValue
+    @AppStorage(TransitCity.key) private var transitCity = TransitCity.automatic.rawValue
     @AppStorage("links.reader") private var reader = false
     @AppStorage(Notifier.enabledKey) private var notify = false
     @State private var notifyNote: String?
@@ -206,12 +208,18 @@ struct SettingsView: View {
                 }
                 .onChange(of: weatherMode) { _, _ in Task { await weather.refresh(force: true) } }
             }
-            Toggle("Tube status", isOn: cardShown("tube"))
+            Toggle("Metro status", isOn: cardShown("tube"))
+            if !hiddenCards.split(separator: ",").contains("tube") {
+                Picker("Metro for", selection: $transitCity) {
+                    ForEach(TransitCity.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                .onChange(of: transitCity) { _, _ in Task { await tube.refresh(force: true) } }
+            }
             Toggle("Markets", isOn: cardShown("markets"))
         } header: {
             Text("On Today")
         } footer: {
-            Text("Weather from Apple Weather, Tube status live from TfL. Tap the Tube card to fold it away. To move cards, or hide others, tap Edit on Today.")
+            Text("Weather from Apple Weather. Metro status live for London (TfL), New York (MTA) and Paris (Île-de-France Mobilités); Automatic picks the nearest, or London. Tap the metro card to fold it away. To move cards, or hide others, tap Edit on Today.")
         }
         .listRowBackground(Theme.card)
     }

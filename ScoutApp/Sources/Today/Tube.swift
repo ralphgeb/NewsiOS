@@ -1,6 +1,68 @@
+import CoreLocation
 import SwiftUI
 
-/// Live Tube and Elizabeth line status from TfL's free, official feed.
+/// The city whose metro Today shows. Automatic picks from where the iPhone last was, or its time zone.
+enum TransitCity: String, CaseIterable, Identifiable {
+    case automatic, london, nyc, paris
+
+    var id: String { rawValue }
+    static let key = "transit.city"
+
+    var title: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .london: return "London"
+        case .nyc: return "New York"
+        case .paris: return "Paris"
+        }
+    }
+
+    /// What locals call it, for the card's title.
+    var network: String {
+        switch self {
+        case .nyc: return "Subway"
+        case .paris: return "Métro"
+        default: return "Tube"
+        }
+    }
+
+    var source: String {
+        switch self {
+        case .nyc: return "MTA"
+        case .paris: return "Île-de-France Mobilités"
+        default: return "TfL"
+        }
+    }
+
+    static var chosen: TransitCity {
+        let pick = TransitCity(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .automatic
+        return pick == .automatic ? guess() : pick
+    }
+
+    /// The nearest of the three if the iPhone was within about 100 km of it, otherwise its time zone.
+    /// Uses the last location iOS already has, so it never asks for permission itself.
+    private static func guess() -> TransitCity {
+        let centres: [(TransitCity, CLLocation)] = [
+            (.london, CLLocation(latitude: 51.5072, longitude: -0.1276)),
+            (.nyc, CLLocation(latitude: 40.7128, longitude: -74.0060)),
+            (.paris, CLLocation(latitude: 48.8566, longitude: 2.3522)),
+        ]
+        if let here = CLLocationManager().location,
+           let near = centres.min(by: { here.distance(from: $0.1) < here.distance(from: $1.1) }),
+           here.distance(from: near.1) < 100_000 {
+            return near.0
+        }
+        switch TimeZone.current.identifier {
+        case "America/New_York": return .nyc
+        case "Europe/Paris": return .paris
+        default: return .london
+        }
+    }
+}
+
+/// Live metro status: London's Tube and Elizabeth line from TfL's free, official feed; New York's
+/// subway and Paris's métro and RER through the Scout service, which asks the MTA and
+/// Île-de-France Mobilités once every two minutes for everyone.
 @MainActor
 final class TubeService: ObservableObject {
     struct Line: Identifiable {
@@ -10,12 +72,19 @@ final class TubeService: ObservableObject {
         let level: Int
         let status: String
         let reason: String
+        let colour: Color
+        /// New York's and Paris's lines go by a letter or number, shown in a round badge.
+        var badge: String? = nil
+        var badgeText: Color = .white
+        /// Position in the network's own order (1, 2, 3… A, C, E…), for the colour strip.
+        var order = 0
     }
 
     @Published private(set) var lines: [Line] = []
     @Published private(set) var fetched: Date?
     @Published private(set) var failed = false
     @Published private(set) var isLoading = false
+    @Published private(set) var city: TransitCity = TransitCity.chosen
 
     private struct LineJSON: Decodable {
         struct Status: Decodable {
@@ -28,29 +97,73 @@ final class TubeService: ObservableObject {
         let lineStatuses: [Status]
     }
 
+    private struct ServiceJSON: Decodable {
+        struct Line: Decodable {
+            let id: String
+            let name: String
+            let short: String?
+            let colour: String?
+            let text: String?
+            let level: Int
+            let status: String
+            let reason: String?
+        }
+        let lines: [Line]
+    }
+
     func refresh(force: Bool = false) async {
-        if !force, let f = fetched, Date.now.timeIntervalSince(f) < 2 * 60 { return }
+        let want = TransitCity.chosen
+        let moved = want != city
+        if !force, !moved, let f = fetched, Date.now.timeIntervalSince(f) < 2 * 60 { return }
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
+        if moved {
+            city = want
+            lines = []
+            fetched = nil
+        }
         do {
-            let url = URL(string: "https://api.tfl.gov.uk/Line/Mode/tube,elizabeth-line/Status")!
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let raw = try JSONDecoder().decode([LineJSON].self, from: data)
-            lines = raw.map { l in
-                let statuses = l.lineStatuses.map { (level: Self.level($0.statusSeverity), text: $0.statusSeverityDescription, reason: $0.reason ?? "") }
-                let worst = statuses.map { $0.level }.max() ?? 0
-                var texts: [String] = []
-                for s in statuses where s.level == worst && !texts.contains(s.text) { texts.append(s.text) }
-                var reasons: [String] = []
-                for s in statuses where !s.reason.isEmpty && !reasons.contains(s.reason) { reasons.append(Self.tidy(s.reason, l.name)) }
-                return Line(id: l.id, name: l.name, level: worst, status: texts.joined(separator: " · "), reason: reasons.joined(separator: "\n\n"))
-            }
-            .sorted { ($0.level, $1.name) > ($1.level, $0.name) }
+            let found = want == .london ? try await Self.london() : try await Self.service(want)
+            guard want == city else { return }
+            var ordered = want == .london ? found.sorted { $0.name < $1.name } : found
+            for i in ordered.indices { ordered[i].order = i }
+            lines = ordered.sorted { ($0.level, $1.name) > ($1.level, $0.name) }
             fetched = .now
             failed = false
         } catch {
             failed = lines.isEmpty
+        }
+    }
+
+    private static func london() async throws -> [Line] {
+        let url = URL(string: "https://api.tfl.gov.uk/Line/Mode/tube,elizabeth-line/Status")!
+        let (data, _) = try await URLSession.shared.data(from: url)
+        let raw = try JSONDecoder().decode([LineJSON].self, from: data)
+        return raw.map { l in
+            let statuses = l.lineStatuses.map { (level: Self.level($0.statusSeverity), text: $0.statusSeverityDescription, reason: $0.reason ?? "") }
+            let worst = statuses.map { $0.level }.max() ?? 0
+            var texts: [String] = []
+            for s in statuses where s.level == worst && !texts.contains(s.text) { texts.append(s.text) }
+            var reasons: [String] = []
+            for s in statuses where !s.reason.isEmpty && !reasons.contains(s.reason) { reasons.append(Self.tidy(s.reason, l.name)) }
+            return Line(id: l.id, name: l.name, level: worst, status: texts.joined(separator: " · "),
+                        reason: reasons.joined(separator: "\n\n"), colour: colours[l.id] ?? Theme.ink)
+        }
+    }
+
+    private static func service(_ city: TransitCity) async throws -> [Line] {
+        guard let s = Bundle.main.object(forInfoDictionaryKey: "ScoutStocksURL") as? String,
+              let base = URL(string: s) else { throw URLError(.badURL) }
+        var request = URLRequest(url: base.appending(path: "transit/\(city.rawValue)"))
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 20
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
+        return try JSONDecoder().decode(ServiceJSON.self, from: data).lines.map { l in
+            Line(id: l.id, name: l.name, level: l.level, status: l.status, reason: l.reason ?? "",
+                 colour: Color(hexString: l.colour) ?? Theme.ink, badge: l.short,
+                 badgeText: Color(hexString: l.text) ?? .white)
         }
     }
 
@@ -79,6 +192,15 @@ final class TubeService: ObservableObject {
     ]
 }
 
+private extension Color {
+    /// "#0039A6" from the Scout service.
+    init?(hexString: String?) {
+        guard let s = hexString?.trimmingCharacters(in: CharacterSet(charactersIn: "#")), s.count == 6,
+              let v = UInt32(s, radix: 16) else { return nil }
+        self.init(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
+    }
+}
+
 /// Lines with problems first (tap one for why), then the rest in one line.
 struct TubeCard: View {
     @EnvironmentObject private var tube: TubeService
@@ -97,7 +219,7 @@ struct TubeCard: View {
                     HStack(spacing: 8) {
                         Image(systemName: "tram.fill").font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Theme.ink)
-                        Text("Tube").font(.system(size: 16, weight: .heavy)).foregroundStyle(Theme.ink)
+                        Text(tube.city.network).font(.system(size: 16, weight: .heavy)).foregroundStyle(Theme.ink)
                         Spacer(minLength: 4)
                         if tube.isLoading {
                             ProgressView().controlSize(.mini)
@@ -130,12 +252,12 @@ struct TubeCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(compact ? "Tube, \(summary(bad)). Show details" : "Tube. Fold away")
+            .accessibilityLabel(compact ? "\(tube.city.network), \(summary(bad)). Show details" : "\(tube.city.network). Fold away")
 
             if !compact {
                 if tube.lines.isEmpty {
                     Button { Task { await tube.refresh(force: true) } } label: {
-                        Text(tube.failed ? "Tube status unavailable. Tap to try again." : "Loading…")
+                        Text(tube.failed ? "\(tube.city.network) status unavailable. Tap to try again." : "Loading…")
                             .font(.system(size: 14)).foregroundStyle(Theme.secondary)
                     }
                     .buttonStyle(.plain)
@@ -160,6 +282,8 @@ struct TubeCard: View {
                         }
                     }
                     lineStrip
+                    Text("\(tube.city.title) · live from \(tube.city.source)")
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.tertiary)
                 }
             }
         }
@@ -202,7 +326,15 @@ struct TubeCard: View {
         HStack(spacing: 7) {
             HStack(spacing: 3) {
                 ForEach(g.lines) { line in
-                    Circle().fill(TubeService.colours[line.id] ?? Theme.ink).frame(width: 9, height: 9)
+                    if let badge = line.badge {
+                        Text(badge)
+                            .font(.system(size: badge.count > 2 ? 6 : 9, weight: .bold))
+                            .foregroundStyle(line.badgeText)
+                            .frame(width: 16, height: 16)
+                            .background(line.colour, in: Circle())
+                    } else {
+                        Circle().fill(line.colour).frame(width: 9, height: 9)
+                    }
                 }
             }
             Text(g.status)
@@ -220,8 +352,8 @@ struct TubeCard: View {
     /// Every line's colour, faded when it's running well.
     private var lineStrip: some View {
         HStack(spacing: 2) {
-            ForEach(tube.lines.sorted { $0.name < $1.name }) { line in
-                Capsule().fill(TubeService.colours[line.id] ?? Theme.ink)
+            ForEach(tube.lines.sorted { $0.order < $1.order }) { line in
+                Capsule().fill(line.colour)
                     .frame(height: 4)
                     .opacity(line.level == 0 ? 0.3 : 1)
             }
@@ -235,7 +367,16 @@ struct TubeCard: View {
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    Capsule().fill(TubeService.colours[line.id] ?? Theme.ink).frame(width: 4, height: 30)
+                    if let badge = line.badge {
+                        Text(badge)
+                            .font(.system(size: badge.count > 2 ? 9 : 13, weight: .bold))
+                            .foregroundStyle(line.badgeText)
+                            .minimumScaleFactor(0.7)
+                            .frame(width: 26, height: 26)
+                            .background(line.colour, in: Circle())
+                    } else {
+                        Capsule().fill(line.colour).frame(width: 4, height: 30)
+                    }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(line.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
                         Text(line.status).font(.system(size: 13, weight: .medium))
