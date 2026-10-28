@@ -111,7 +111,7 @@ struct NewsView: View {
                             .font(.system(size: 15, weight: .semibold))
                             .frame(maxWidth: .infinity).frame(height: 46)
                             .background(Theme.card, in: Capsule())
-                            .foregroundStyle(Theme.ink)
+                            .foregroundStyle(Theme.text)
                     }
                     .buttonStyle(PressStyle())
                 }
@@ -151,7 +151,7 @@ struct NewsView: View {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles").foregroundStyle(Theme.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Make All yours").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                    Text("Make All yours").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                     Text("Pick your interests and they rank higher here.").font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 }
                 Spacer()
@@ -183,10 +183,10 @@ struct SectionCover: View {
                     Circle().fill(Theme.accent).frame(width: 7, height: 7)
                     Text(topic.coverLabel + (brief.generated.map { " · \(Format.time($0))" } ?? "")).scoutLabel()
                 }
-                Text(brief.title).font(Theme.headline(22, weight: .bold)).foregroundStyle(Theme.ink)
+                Text(brief.title).font(Theme.headline(22, weight: .bold)).foregroundStyle(Theme.text)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(NewsStore.paragraphs(brief.summary), id: \.self) { p in
-                    Text(p).font(.system(size: 14)).foregroundStyle(Theme.ink.opacity(0.8))
+                    Text(p).font(.system(size: 14)).foregroundStyle(Theme.text.opacity(0.8))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if !brief.points.isEmpty {
@@ -195,7 +195,7 @@ struct SectionCover: View {
                             NavigationLink(value: store.story(p.storyId).map { StoryRoute(id: $0.id, sequence: sequence) }) {
                                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                                     Circle().fill(Theme.ink.opacity(0.4)).frame(width: 5, height: 5).offset(y: -2)
-                                    Text(p.line).font(.system(size: 14)).foregroundStyle(Theme.ink)
+                                    Text(p.line).font(.system(size: 14)).foregroundStyle(Theme.text)
                                         .multilineTextAlignment(.leading)
                                     Spacer(minLength: 0)
                                     if p.storyId != nil {
@@ -220,11 +220,11 @@ struct SectionCover: View {
                                         HStack(spacing: 4) {
                                             Image(systemName: Direction.arrow(m.direction)).font(.system(size: 9, weight: .bold))
                                                 .foregroundStyle(m.direction == "down" ? Theme.accent : Theme.ink)
-                                            Text(m.ticker).font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundStyle(Theme.ink)
+                                            Text(m.ticker).font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundStyle(Theme.text)
                                         }
                                         Text(m.name ?? "").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
                                         if let note = m.note {
-                                            Text(note).font(.system(size: 11)).foregroundStyle(Theme.ink.opacity(0.7)).lineLimit(3)
+                                            Text(note).font(.system(size: 11)).foregroundStyle(Theme.text.opacity(0.7)).lineLimit(3)
                                                 .multilineTextAlignment(.leading)
                                         }
                                     }

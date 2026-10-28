@@ -219,7 +219,7 @@ struct TubeCard: View {
                     HStack(spacing: 8) {
                         Image(systemName: "tram.fill").font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Theme.ink)
-                        Text(tube.city.network).font(.system(size: 16, weight: .heavy)).foregroundStyle(Theme.ink)
+                        Text(tube.city.network).font(.system(size: 16, weight: .heavy)).foregroundStyle(Theme.text)
                         Spacer(minLength: 4)
                         if tube.isLoading {
                             ProgressView().controlSize(.mini)
@@ -238,7 +238,7 @@ struct TubeCard: View {
                         } else if bad.isEmpty {
                             HStack(spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill").font(.system(size: 13)).foregroundStyle(Theme.ink)
-                                Text("Good service on all lines").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
+                                Text("Good service on all lines").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
                                 Spacer(minLength: 8)
                                 lineStrip.frame(width: 90)
                             }
@@ -265,7 +265,7 @@ struct TubeCard: View {
                     if bad.isEmpty {
                         HStack(spacing: 10) {
                             Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.ink)
-                            Text("Good service on all lines").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
+                            Text("Good service on all lines").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
                         }
                     } else {
                         VStack(spacing: 0) {
@@ -339,7 +339,7 @@ struct TubeCard: View {
             }
             Text(g.status)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(g.level == 2 ? Theme.accent : Theme.ink)
+                .foregroundStyle(g.level == 2 ? Theme.accent : Theme.text)
         }
         .lineLimit(1)
         .padding(.horizontal, 10)
@@ -378,7 +378,7 @@ struct TubeCard: View {
                         Capsule().fill(line.colour).frame(width: 4, height: 30)
                     }
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(line.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                        Text(line.name).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                         Text(line.status).font(.system(size: 13, weight: .medium))
                             .foregroundStyle(line.level == 2 ? Theme.accent : Theme.secondary)
                     }
@@ -390,7 +390,7 @@ struct TubeCard: View {
                     }
                 }
                 if open == line.id, !line.reason.isEmpty {
-                    Text(line.reason).font(.system(size: 13)).foregroundStyle(Theme.ink.opacity(0.8))
+                    Text(line.reason).font(.system(size: 13)).foregroundStyle(Theme.text.opacity(0.8))
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)
                         .padding(.leading, 14)

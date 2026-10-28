@@ -253,7 +253,7 @@ struct TodayView: View {
                 EmptyCard(symbol: "wifi.exclamationmark", title: "Couldn't load the news", text: error)
                 Button("Try again") { Task { await store.refresh() } }
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(Theme.text)
             } else {
                 EmptyCard(symbol: "sun.horizon",
                           title: "Your briefing is on its way",
@@ -270,7 +270,7 @@ struct TodayView: View {
                     .padding(.horizontal, 16)
                     .frame(height: 36)
                     .background(Theme.card, in: Capsule())
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(Theme.text)
             }
             .buttonStyle(PressStyle())
             Text("Next briefing \(Self.nextUpdate). Written by AI from the day's headlines. It can make mistakes. Not financial advice.")
@@ -392,7 +392,7 @@ struct CoverCard: View {
                         Text(p)
                             .font(.system(size: 16))
                             .lineSpacing(2)
-                            .foregroundStyle(Theme.ink.opacity(0.85))
+                            .foregroundStyle(Theme.text.opacity(0.85))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -475,7 +475,7 @@ struct TopStoriesCard: View {
         HStack(alignment: .top, spacing: 12) {
             Text("\(number)").font(Theme.number(20, weight: .bold)).foregroundStyle(Theme.tertiary).frame(width: 22, alignment: .leading)
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.title).font(Theme.headline(16)).foregroundStyle(Theme.ink)
+                Text(item.title).font(Theme.headline(16)).foregroundStyle(Theme.text)
                 if let t = item.text { Text(t).font(.system(size: 13)).foregroundStyle(Theme.secondary) }
             }
             Spacer(minLength: 0)
@@ -500,7 +500,7 @@ struct NumberedHero: View {
                         .font(Theme.number(15, weight: .bold))
                         .frame(width: 30, height: 30)
                         .background(Theme.card, in: Circle())
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(Theme.text)
                         .padding(12)
                 }
             VStack(alignment: .leading, spacing: 7) {
@@ -509,7 +509,7 @@ struct NumberedHero: View {
                     Text("· \(Format.ago(story.published))").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
                     StatusPill(story: story)
                 }
-                Text(title).font(Theme.headline(19)).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
+                Text(title).font(Theme.headline(19)).foregroundStyle(Theme.text).fixedSize(horizontal: false, vertical: true)
                 if let text, !text.isEmpty {
                     Text(text).font(.system(size: 14)).foregroundStyle(Theme.secondary).lineLimit(4)
                 }
@@ -545,11 +545,11 @@ struct MoversCard: View {
                                     .foregroundStyle(m.direction == "down" ? Theme.accent : Theme.ink)
                             }
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(m.ticker).font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundStyle(Theme.ink)
+                                Text(m.ticker).font(.system(size: 14, weight: .bold, design: .monospaced)).foregroundStyle(Theme.text)
                                 Text(m.name ?? "").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
                             }
                             if let note = m.note {
-                                Text(note).font(.system(size: 12)).foregroundStyle(Theme.ink.opacity(0.75)).lineLimit(4)
+                                Text(note).font(.system(size: 12)).foregroundStyle(Theme.text.opacity(0.75)).lineLimit(4)
                                     .multilineTextAlignment(.leading)
                             }
                             Spacer(minLength: 0)
@@ -579,7 +579,7 @@ struct InBriefCard: View {
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Circle().fill(Theme.accent).frame(width: 6, height: 6).offset(y: -2)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(item.title).font(.system(size: 15)).foregroundStyle(Theme.ink)
+                                Text(item.title).font(.system(size: 15)).foregroundStyle(Theme.text)
                                     .multilineTextAlignment(.leading)
                                 if let s = item.story {
                                     Text("\(s.outletName) · \(Format.ago(s.published))").font(.system(size: 12)).foregroundStyle(Theme.tertiary)
@@ -627,7 +627,7 @@ struct TopicPicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("What should Today be about?").font(Theme.headline(24, weight: .bold)).foregroundStyle(Theme.ink)
+                Text("What should Today be about?").font(Theme.headline(24, weight: .bold)).foregroundStyle(Theme.text)
                 Text("Each topic has its own front page every morning: the main events, the key stories and what to watch.")
                     .font(.system(size: 14)).foregroundStyle(Theme.secondary)
             }
@@ -645,7 +645,7 @@ struct TopicPicker: View {
                         VStack(alignment: .leading, spacing: 10) {
                             Image(systemName: t.symbol).font(.system(size: 20, weight: .medium))
                                 .foregroundStyle(on ? Theme.accent : Theme.ink)
-                            Text(t.title).font(Theme.headline(18)).foregroundStyle(Theme.ink)
+                            Text(t.title).font(Theme.headline(18)).foregroundStyle(Theme.text)
                             Text(t.detail).font(.system(size: 12)).foregroundStyle(Theme.secondary)
                                 .multilineTextAlignment(.leading)
                             Spacer(minLength: 0)

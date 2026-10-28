@@ -1,8 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// Scout's palette: one main color (ink) and one accent, both chosen in Settings, exactly as in Halo.
-/// Everything else is ink at a lower opacity, so any palette stays coherent in light and dark.
+/// Scout's palette: a main color (ink), a text color and one accent, chosen in Settings as in Halo.
+/// Everything else is ink or text at a lower opacity, so any palette stays coherent in light and dark.
 enum Theme {
     static var ink: Color {
         Color(UIColor { Appearance.current.colors(for: $0.userInterfaceStyle).ink.uiColor })
@@ -18,8 +18,13 @@ enum Theme {
         Color(UIColor { Appearance.current.colors(for: $0.userInterfaceStyle).card.uiColor })
     }
 
-    static var secondary: Color { ink.opacity(0.5) }
-    static var tertiary: Color { ink.opacity(0.28) }
+    /// Words: the Text color from Settings, or the main color when none is set.
+    static var text: Color {
+        Color(UIColor { Appearance.current.colors(for: $0.userInterfaceStyle).textColor.uiColor })
+    }
+
+    static var secondary: Color { text.opacity(0.5) }
+    static var tertiary: Color { text.opacity(0.28) }
     static var track: Color { ink.opacity(0.08) }
     static var hairline: Color { ink.opacity(0.08) }
 

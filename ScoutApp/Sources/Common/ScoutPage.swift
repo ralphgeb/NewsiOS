@@ -126,7 +126,7 @@ struct PageHeader: View {
                 Text(title)
                     .font(.system(size: 32, weight: .heavy))
                     .tracking(-0.6)
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(Theme.text)
                 HStack(spacing: 6) {
                     if isRefreshing {
                         ProgressView().controlSize(.mini)
@@ -155,7 +155,7 @@ struct PageHeader: View {
                 .padding(.horizontal, 12)
                 .frame(height: 32)
                 .background(editing.wrappedValue ? Theme.ink : Theme.card, in: Capsule())
-                .foregroundStyle(editing.wrappedValue ? Theme.background : Theme.ink)
+                .foregroundStyle(editing.wrappedValue ? Theme.background : Theme.text)
             }
             SettingsButton(showSettings: $showSettings)
         }

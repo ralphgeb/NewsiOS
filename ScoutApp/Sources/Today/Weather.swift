@@ -370,7 +370,7 @@ struct WeatherCard: View {
         HStack(spacing: 14) {
             WeatherIcon(name: "partly-day", size: 40)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Weather where you are").font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.ink)
+                Text("Weather where you are").font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.text)
                 Text("Allow your location for the forecast here. It stays on this iPhone.")
                     .font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 Button { weather.requestPermission() } label: {
@@ -395,10 +395,10 @@ struct WeatherCard: View {
                     Text("\(Int(r.temperature.rounded()))°")
                         .font(Theme.number(44, weight: .bold))
                         .tracking(-1)
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(Theme.text)
                         .contentTransition(.numericText())
                     Text(WeatherCode.label(r.code, day: r.isDay))
-                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink.opacity(0.75))
+                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text.opacity(0.75))
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 3) {
@@ -409,7 +409,7 @@ struct WeatherCard: View {
                         Text(r.place).lineLimit(1)
                     }
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(Theme.text)
                     if let h = r.high, let l = r.low {
                         Text("H \(Int(h.rounded()))°  L \(Int(l.rounded()))°")
                             .font(Theme.number(13, weight: .medium)).foregroundStyle(Theme.secondary)
@@ -551,7 +551,7 @@ private struct HoursChart: View {
                             if isMark {
                                 Text("\(Int(h.temperature.rounded()))°")
                                     .font(Theme.number(12, weight: .bold))
-                                    .foregroundStyle(isNow ? Theme.accent : Theme.ink)
+                                    .foregroundStyle(isNow ? Theme.accent : Theme.text)
                             }
                         }
                 }

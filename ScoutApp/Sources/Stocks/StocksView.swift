@@ -36,7 +36,7 @@ struct StocksView: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .frame(maxWidth: .infinity).frame(height: 40)
                                 .background(Theme.card, in: Capsule())
-                                .foregroundStyle(Theme.ink)
+                                .foregroundStyle(Theme.text)
                         }
                         .buttonStyle(PressStyle())
                     }
@@ -77,7 +77,7 @@ struct StocksView: View {
                     .background(Theme.accent, in: Circle())
                     .foregroundStyle(.white)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Add the companies you follow").font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.ink)
+                    Text("Add the companies you follow").font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.text)
                     Text("Search 50,000 stocks, funds, indices, currencies and crypto by name or ticker.")
                         .font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 }
@@ -94,7 +94,7 @@ struct StocksView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .frame(maxWidth: .infinity).frame(height: 46)
                 .background(Theme.card, in: Capsule())
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(Theme.text)
         }
         .buttonStyle(PressStyle())
     }
@@ -112,12 +112,12 @@ struct MoverList: View {
                         Text("\(i + 1)").font(Theme.number(15, weight: .bold)).foregroundStyle(Theme.tertiary)
                             .frame(width: 20, alignment: .leading)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(m.symbol).font(.system(size: 15, weight: .heavy)).foregroundStyle(Theme.ink).lineLimit(1)
+                            Text(m.symbol).font(.system(size: 15, weight: .heavy)).foregroundStyle(Theme.text).lineLimit(1)
                             Text(m.name).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
                         }
                         Spacer(minLength: 6)
                         Text(m.price.formatted(.number.precision(.fractionLength(m.price >= 1000 ? 0 : 2))))
-                            .font(Theme.number(14, weight: .semibold)).foregroundStyle(Theme.ink)
+                            .font(Theme.number(14, weight: .semibold)).foregroundStyle(Theme.text)
                         Text((m.pct >= 0 ? "+" : "−") + abs(m.pct).formatted(.number.precision(.fractionLength(1))) + "%")
                             .font(Theme.number(12, weight: .bold))
                             .padding(.horizontal, 7)
@@ -167,7 +167,7 @@ struct MarketTile: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(stocks.name(symbol)).font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.secondary).lineLimit(1)
             Text(StockFormat.price(q?.price, q))
-                .font(Theme.number(17, weight: .bold)).foregroundStyle(Theme.ink)
+                .font(Theme.number(17, weight: .bold)).foregroundStyle(Theme.text)
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .contentTransition(.numericText())
             HStack(spacing: 6) {
@@ -230,7 +230,7 @@ struct StockRow: View {
         HStack(spacing: 12) {
             Monogram(name: q?.displayName, ticker: symbol)
             VStack(alignment: .leading, spacing: 1) {
-                Text(symbol).font(.system(size: 16, weight: .heavy)).foregroundStyle(Theme.ink).lineLimit(1)
+                Text(symbol).font(.system(size: 16, weight: .heavy)).foregroundStyle(Theme.text).lineLimit(1)
                 Text(stocks.name(symbol)).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
             }
             Spacer(minLength: 4)
@@ -238,7 +238,7 @@ struct StockRow: View {
                 .frame(width: 54, height: 26)
             VStack(alignment: .trailing, spacing: 4) {
                 Text(StockFormat.price(q?.price, q))
-                    .font(Theme.number(16, weight: .bold)).foregroundStyle(Theme.ink)
+                    .font(Theme.number(16, weight: .bold)).foregroundStyle(Theme.text)
                     .lineLimit(1).minimumScaleFactor(0.7)
                     .contentTransition(.numericText())
                 ChangePill(quote: q)
@@ -282,7 +282,7 @@ struct ChangeText: View {
     var body: some View {
         Text(StockFormat.change(quote, display))
             .font(Theme.number(12, weight: .bold))
-            .foregroundStyle(quote?.isDown == true ? Theme.accent : Theme.ink)
+            .foregroundStyle(quote?.isDown == true ? Theme.accent : Theme.text)
             .lineLimit(1)
     }
 }
@@ -344,7 +344,7 @@ struct StockSearchView: View {
                             Monogram(name: e.name, ticker: e.symbol)
                             VStack(alignment: .leading, spacing: 1) {
                                 HStack(spacing: 6) {
-                                    Text(e.symbol).font(.system(size: 15, weight: .heavy)).foregroundStyle(Theme.ink)
+                                    Text(e.symbol).font(.system(size: 15, weight: .heavy)).foregroundStyle(Theme.text)
                                     Text(e.kindTitle).font(.system(size: 10, weight: .bold)).textCase(.uppercase)
                                         .padding(.horizontal, 5).padding(.vertical, 1)
                                         .background(Theme.track, in: Capsule()).foregroundStyle(Theme.secondary)
@@ -367,7 +367,7 @@ struct StockSearchView: View {
                         stocks.toggle(raw, name: nil)
                     } label: {
                         Label(stocks.follows(raw) ? "\(raw) added" : "Add \(raw) as a ticker", systemImage: stocks.follows(raw) ? "checkmark.circle.fill" : "plus.circle")
-                            .foregroundStyle(Theme.ink)
+                            .foregroundStyle(Theme.text)
                     }
                     .listRowBackground(Theme.card)
                 }

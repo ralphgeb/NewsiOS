@@ -29,9 +29,13 @@ struct RGBA: Codable, Hashable {
 
 /// The three surface colors for one appearance (light or dark). The accent is shared.
 struct PaletteColors: Codable, Hashable {
-    var ink: RGBA          // main color: rings, numbers, charts, text
+    var ink: RGBA          // main color: rings, charts, icons, selected buttons
     var background: RGBA
     var card: RGBA
+    /// The color for words; looks without one (every preset) use the main color.
+    var text: RGBA? = nil
+
+    var textColor: RGBA { text ?? ink }
 }
 
 /// Typeface for headlines and numbers, from Settings.

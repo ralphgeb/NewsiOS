@@ -9,7 +9,7 @@ The native iPhone app for ScoutAI: your morning briefing on tech, finance, world
 - **Stocks**: indices, the pound, bitcoin, gold and oil along the top; your stocks; the biggest US companies. Prices update every 30 minutes on weekdays (7:00 to 22:30 UK time), and the page picks up each update while it's open. Tap a change to switch between %, the price change and market value. **Add** searches about 50,000 stocks, funds, indices, currencies and cryptos by name or ticker. A stock's page has a chart you can drag across (1D, 1M, 1Y), key numbers, the AI's "What's happening", headlines and every Scout story that names it.
 - **Saved**: bookmark any story; it stays even after it leaves the news.
 - **Stories**: the picture, the AI summary with key points, the rumour check, the market impact (tap a company for every story that names it) and every outlet covering it. Swipe left and right between stories. The button at the bottom opens the original article in Safari, in Reader view if you like.
-- **Settings**: the same Appearance section as Halo (Automatic, Light or Dark, six presets, your own colours for Light and Dark, four typefaces), your Today topic, news interests, weather location, Reader view and the morning briefing notification.
+- **Settings**: the same Appearance section as Halo (Automatic, Light or Dark, six presets, four typefaces, and a Custom colors page for your own main, text, accent, background and card colours in Light and Dark), your Today topic, news interests, weather location, metro city, Reader view and the morning briefing notification.
 - **Widget**: your briefing's headline and top stories (small, medium, large and Lock Screen), in your colours.
 
 SwiftUI, iOS 17+, no third-party libraries.

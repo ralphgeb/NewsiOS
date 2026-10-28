@@ -162,7 +162,7 @@ struct StoryDetailView: View {
             }
             Text(s.title)
                 .font(Theme.headline(26, weight: .bold))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(Theme.text)
                 .fixedSize(horizontal: false, vertical: true)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
@@ -190,14 +190,14 @@ struct StoryDetailView: View {
             }
             Text(s.summary ?? s.claim ?? "")
                 .font(.system(size: 16))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(Theme.text)
                 .fixedSize(horizontal: false, vertical: true)
             if let points = s.keyPoints, !points.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(points, id: \.self) { p in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Circle().fill(Theme.ink.opacity(0.4)).frame(width: 5, height: 5).offset(y: -2)
-                            Text(p).font(.system(size: 15)).foregroundStyle(Theme.ink.opacity(0.85))
+                            Text(p).font(.system(size: 15)).foregroundStyle(Theme.text.opacity(0.85))
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -221,7 +221,7 @@ struct StoryDetailView: View {
                             Favicon(host: src.host, size: 18).padding(.top, 1)
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(spacing: 4) {
-                                    Text(src.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.ink)
+                                    Text(src.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text)
                                     Text("· \(Format.ago(src.published))").font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                                 }
                                 if let t = src.title {
@@ -253,7 +253,7 @@ struct StoryDetailView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Up next").scoutLabel()
-                    Text(n.title).font(Theme.headline(16)).foregroundStyle(Theme.ink).lineLimit(3)
+                    Text(n.title).font(Theme.headline(16)).foregroundStyle(Theme.text).lineLimit(3)
                         .multilineTextAlignment(.leading)
                     Text("\(n.outletName) · \(Format.ago(n.published))").font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                 }
@@ -294,13 +294,13 @@ struct RumourCheckCard: View {
                 }
                 .frame(width: 76, height: 76)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(story.verdict).font(Theme.headline(22)).foregroundStyle(p < 0.35 ? Theme.accent : Theme.ink)
+                    Text(story.verdict).font(Theme.headline(22)).foregroundStyle(p < 0.35 ? Theme.accent : Theme.text)
                     Text("\(story.outletCount) outlet\(story.outletCount > 1 ? "s" : "") reporting · first seen \(Format.ago(story.firstSeen).lowercased())")
                         .font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 }
             }
             if let r = story.likelihoodReason, !r.isEmpty {
-                Text(r).font(.system(size: 15)).foregroundStyle(Theme.ink.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+                Text(r).font(.system(size: 15)).foregroundStyle(Theme.text.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
             }
             if let signals = story.signals, !signals.isEmpty {
                 FlowLayout(spacing: 6) {
@@ -333,7 +333,7 @@ struct MarketImpactCard: View {
                 }
             }
             if let take = story.marketTake, !take.isEmpty {
-                Text(take).font(.system(size: 15)).foregroundStyle(Theme.ink.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+                Text(take).font(.system(size: 15)).foregroundStyle(Theme.text.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
             }
             ForEach(story.stocks ?? [], id: \.ticker) { k in
                 NavigationLink(value: TickerRoute(ticker: k.ticker, name: k.name)) {
@@ -341,7 +341,7 @@ struct MarketImpactCard: View {
                         Monogram(name: k.name, ticker: k.ticker)
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
-                                Text(k.name ?? k.ticker).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                                Text(k.name ?? k.ticker).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                                 Text(k.ticker).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(Theme.tertiary)
                             }
                             if let r = k.reason {
@@ -389,7 +389,7 @@ struct Monogram: View {
     var body: some View {
         Text(initials)
             .font(.system(size: initials.count > 3 ? 10 : 12, weight: .bold, design: .rounded))
-            .foregroundStyle(Theme.ink)
+            .foregroundStyle(Theme.text)
             .frame(width: 36, height: 36)
             .background(Theme.track, in: Circle())
     }

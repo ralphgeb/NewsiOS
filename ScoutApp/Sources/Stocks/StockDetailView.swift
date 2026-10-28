@@ -110,7 +110,7 @@ struct StockDetailView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(q?.displayName ?? route.name ?? symbol)
                         .font(.system(size: 22, weight: .heavy)).tracking(-0.3)
-                        .foregroundStyle(Theme.ink).lineLimit(2)
+                        .foregroundStyle(Theme.text).lineLimit(2)
                     Text([symbol, q?.exchange, q?.currency].compactMap { $0 }.joined(separator: " · "))
                         .font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.secondary)
                 }
@@ -118,14 +118,14 @@ struct StockDetailView: View {
             Text(StockFormat.price(value, q))
                 .font(Theme.number(46, weight: .heavy))
                 .tracking(-1)
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(Theme.text)
                 .contentTransition(.numericText())
                 .padding(.top, 6)
             HStack(spacing: 8) {
                 if let delta, let pct {
                     Text("\(delta >= 0 ? "+" : "−")\(abs(delta).formatted(.number.precision(.fractionLength(2)))) (\(abs(pct).formatted(.number.precision(.fractionLength(2))))%)")
                         .font(Theme.number(15, weight: .bold))
-                        .foregroundStyle(down ? Theme.accent : Theme.ink)
+                        .foregroundStyle(down ? Theme.accent : Theme.text)
                 }
                 Text(shown.map { label(for: $0.time) } ?? rangeLabel(q))
                     .font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
@@ -263,7 +263,7 @@ struct StockDetailView: View {
                         HStack {
                             Text(shown[i].0).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
                             Spacer(minLength: 4)
-                            Text(shown[i].1).font(Theme.number(14, weight: .bold)).foregroundStyle(Theme.ink).lineLimit(1)
+                            Text(shown[i].1).font(Theme.number(14, weight: .bold)).foregroundStyle(Theme.text).lineLimit(1)
                         }
                     }
                 }
@@ -287,13 +287,13 @@ struct StockDetailView: View {
                             .font(.system(size: 11, weight: .bold))
                             .padding(.horizontal, 8).frame(height: 20)
                             .background(sentiment == "negative" ? Theme.accent.opacity(0.15) : Theme.track, in: Capsule())
-                            .foregroundStyle(sentiment == "negative" ? Theme.accent : Theme.ink)
+                            .foregroundStyle(sentiment == "negative" ? Theme.accent : Theme.text)
                     }
                 }
                 if let h = s.headline {
-                    Text(h).font(Theme.headline(20, weight: .heavy)).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
+                    Text(h).font(Theme.headline(20, weight: .heavy)).foregroundStyle(Theme.text).fixedSize(horizontal: false, vertical: true)
                 }
-                Text(text).font(.system(size: 15)).foregroundStyle(Theme.ink.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+                Text(text).font(.system(size: 15)).foregroundStyle(Theme.text.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
                 if let g = s.generated {
                     Text("Scout AI · \(Format.ago(g).lowercased())").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.tertiary)
                 }
@@ -306,9 +306,9 @@ struct StockDetailView: View {
                     Text("What's happening").scoutLabel()
                 }
                 if let h = l.headline {
-                    Text(h).font(Theme.headline(20, weight: .heavy)).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
+                    Text(h).font(Theme.headline(20, weight: .heavy)).foregroundStyle(Theme.text).fixedSize(horizontal: false, vertical: true)
                 }
-                Text(l.text).font(.system(size: 15)).foregroundStyle(Theme.ink.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+                Text(l.text).font(.system(size: 15)).foregroundStyle(Theme.text.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
                 Text("Written on this iPhone by Apple Intelligence. Scout's own summary replaces it once it's ready.")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.tertiary)
             }
@@ -343,7 +343,7 @@ struct StockDetailView: View {
                         if let u = Story.web(h.link) { reading = WebLink(url: u) }
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(h.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                            Text(h.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
                                 .multilineTextAlignment(.leading)
                             Text([h.source, Format.ago(h.published)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                                 .font(.system(size: 12)).foregroundStyle(Theme.tertiary)

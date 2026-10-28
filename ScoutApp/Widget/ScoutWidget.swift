@@ -11,6 +11,8 @@ struct ScoutWidgets: WidgetBundle {
 struct BriefingEntry: TimelineEntry {
     let date: Date
     let digest: BriefingDigest
+    /// The look from Settings when this entry was made, so a color change reloads the widget in it.
+    var appearance: Appearance = Appearance.load()
 }
 
 struct BriefingProvider: TimelineProvider {
@@ -45,7 +47,6 @@ struct BriefingWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: Shared.widgetKind, provider: BriefingProvider()) { entry in
             BriefingWidgetView(entry: entry)
-                .containerBackground(for: .widget) { Theme.background }
                 .widgetURL(URL(string: "scout://today"))
         }
         .configurationDisplayName("Briefing")
@@ -58,9 +59,23 @@ struct BriefingWidgetView: View {
     let entry: BriefingEntry
     @Environment(\.widgetFamily) private var family
 
+    @Environment(\.colorScheme) private var scheme
+
     private var d: BriefingDigest { entry.digest }
 
+    /// Plain colors worked out here from the saved look, rather than colors that change with
+    /// light and dark later, which a widget can't always carry over to the Home Screen.
+    private var palette: PaletteColors { entry.appearance.colors(for: scheme == .dark ? .dark : .light) }
+    private var ink: Color { palette.ink.color }
+    private var text: Color { palette.textColor.color }
+    private var accent: Color { entry.appearance.accent.color }
+
     var body: some View {
+        content
+            .containerBackground(for: .widget) { palette.background.color }
+    }
+
+    @ViewBuilder private var content: some View {
         switch family {
         case .systemMedium: medium
         case .systemLarge: large
@@ -72,12 +87,12 @@ struct BriefingWidgetView: View {
 
     private var label: some View {
         HStack(spacing: 6) {
-            Circle().fill(Theme.accent).frame(width: 6, height: 6)
+            Circle().fill(accent).frame(width: 6, height: 6)
             Text(d.topic.title + (d.generated.map { " · \(Format.time($0))" } ?? ""))
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(1)
                 .textCase(.uppercase)
-                .foregroundStyle(Theme.secondary)
+                .foregroundStyle(text.opacity(0.5))
                 .lineLimit(1)
         }
     }
@@ -87,7 +102,7 @@ struct BriefingWidgetView: View {
             label
             Text(d.title)
                 .font(Theme.headline(16, weight: .bold))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(text)
                 .lineLimit(5)
                 .minimumScaleFactor(0.85)
             Spacer(minLength: 0)
@@ -100,7 +115,7 @@ struct BriefingWidgetView: View {
             label
             Text(d.title)
                 .font(Theme.headline(17, weight: .bold))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(text)
                 .lineLimit(2)
             lines(2)
             Spacer(minLength: 0)
@@ -113,12 +128,12 @@ struct BriefingWidgetView: View {
             label
             Text(d.title)
                 .font(Theme.headline(21, weight: .bold))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(text)
                 .lineLimit(3)
             if let s = d.summary {
-                Text(s).font(.system(size: 13)).foregroundStyle(Theme.ink.opacity(0.75)).lineLimit(4)
+                Text(s).font(.system(size: 13)).foregroundStyle(text.opacity(0.75)).lineLimit(4)
             }
-            Rectangle().fill(Theme.hairline).frame(height: 0.5)
+            Rectangle().fill(ink.opacity(0.08)).frame(height: 0.5)
             lines(5)
             Spacer(minLength: 0)
         }
@@ -129,8 +144,8 @@ struct BriefingWidgetView: View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(d.lines.prefix(n).enumerated()), id: \.offset) { i, line in
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text("\(i + 1)").font(Theme.number(12, weight: .bold)).foregroundStyle(Theme.tertiary)
-                    Text(line).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.ink).lineLimit(2)
+                    Text("\(i + 1)").font(Theme.number(12, weight: .bold)).foregroundStyle(text.opacity(0.28))
+                    Text(line).font(.system(size: 13, weight: .medium)).foregroundStyle(text).lineLimit(2)
                 }
             }
         }

@@ -52,6 +52,8 @@ struct ScoutApp: App {
                 Task { await tube.refresh() }
             case .background:
                 Self.scheduleRefresh()
+                // picks up any color or topic change from this visit, in case a reload was skipped
+                WidgetCenter.shared.reloadAllTimelines()
             default:
                 break
             }

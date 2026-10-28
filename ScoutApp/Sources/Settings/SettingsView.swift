@@ -59,6 +59,7 @@ struct SettingsView: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .foregroundStyle(Theme.text)
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -138,12 +139,6 @@ struct SettingsView: View {
                 .padding(.vertical, 6)
             }
 
-            ColorPicker("Main color", selection: colorBinding(\.ink), supportsOpacity: false)
-            ColorPicker("Accent", selection: accentBinding, supportsOpacity: false)
-            ColorPicker("Background", selection: colorBinding(\.background), supportsOpacity: false)
-            ColorPicker("Cards", selection: colorBinding(\.card), supportsOpacity: false)
-            Toggle("Same colors in Light and Dark", isOn: $look.appearance.sameInBoth)
-
             Picker("Typeface", selection: $look.appearance.numberStyle) {
                 ForEach(NumberStyle.allCases) { s in
                     Text(s.title).tag(s)
@@ -153,48 +148,44 @@ struct SettingsView: View {
             HStack(spacing: 16) {
                 ZStack {
                     Ring(progress: 0.72, lineWidth: 5)
-                    Text("72").font(Theme.number(15)).foregroundStyle(Theme.ink)
+                    Text("72").font(Theme.number(15)).foregroundStyle(Theme.text)
                 }
                 .frame(width: 58, height: 58)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Morning tech briefing").scoutLabel()
-                    Text("The day's biggest stories, at a glance").font(Theme.headline(17)).foregroundStyle(Theme.ink)
+                    Text("The day's biggest stories, at a glance").font(Theme.headline(17)).foregroundStyle(Theme.text)
                 }
                 Spacer()
             }
             .padding(.vertical, 4)
 
-            Button("Reset to original colors", role: .destructive) { withAnimation { look.reset() } }
+            NavigationLink {
+                CustomColorsView()
+            } label: {
+                HStack {
+                    Text("Custom colors")
+                    Spacer()
+                    swatches
+                }
+            }
         } header: {
             Text("Appearance")
         } footer: {
-            Text("Colors you pick here are for \(look.appearance.sameInBoth ? "both Light and Dark mode" : (scheme == .dark ? "Dark mode" : "Light mode")). The typeface is for headlines and numbers. The widgets follow too.")
+            Text("Pick a look, or make your own under Custom colors. The typeface is for headlines and numbers. The widgets follow too.")
         }
         .listRowBackground(Theme.card)
     }
 
-    /// Edits the palette for the current appearance (or both, when they're shared).
-    private func colorBinding(_ key: WritableKeyPath<PaletteColors, RGBA>) -> Binding<Color> {
-        Binding(
-            get: { look.appearance.colors(for: scheme == .dark ? .dark : .light)[keyPath: key].color },
-            set: { new in
-                var a = look.appearance
-                a.presetID = "custom"
-                if a.sameInBoth || scheme != .dark { a.light[keyPath: key] = RGBA(new) }
-                if a.sameInBoth || scheme == .dark { a.dark[keyPath: key] = RGBA(new) }
-                look.appearance = a
+    /// The colors in use now, as small dots.
+    private var swatches: some View {
+        let c = look.appearance.colors(for: scheme == .dark ? .dark : .light)
+        return HStack(spacing: -5) {
+            ForEach(Array([c.ink, c.textColor, look.appearance.accent, c.background, c.card].enumerated()), id: \.offset) { _, rgba in
+                Circle().fill(rgba.color).frame(width: 18, height: 18)
+                    .overlay(Circle().stroke(Theme.hairline, lineWidth: 1))
             }
-        )
-    }
-
-    private var accentBinding: Binding<Color> {
-        Binding(
-            get: { look.appearance.accent.color },
-            set: { new in
-                look.appearance.presetID = "custom"
-                look.appearance.accent = RGBA(new)
-            }
-        )
+        }
+        .accessibilityHidden(true)
     }
 
     // MARK: Today, reading, notifications
@@ -306,7 +297,7 @@ struct InterestsView: View {
                             }
                         } label: {
                             HStack {
-                                Text(t).foregroundStyle(Theme.ink)
+                                Text(t).foregroundStyle(Theme.text)
                                 Spacer()
                                 if store.interests.contains(t) {
                                     Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
@@ -369,5 +360,100 @@ enum Notifier {
         content.sound = .default
         content.userInfo = ["url": "scout://today"]
         try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: d.id, content: content, trigger: nil))
+    }
+}
+
+// MARK: - Custom colors
+
+/// Every color you can change, for Light or Dark (or both), like Halo's.
+struct CustomColorsView: View {
+    @EnvironmentObject private var look: AppearanceStore
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Form {
+            Section {
+                ColorPicker("Main color", selection: colorBinding(\.ink), supportsOpacity: false)
+                ColorPicker("Text", selection: textBinding, supportsOpacity: false)
+                ColorPicker("Accent", selection: accentBinding, supportsOpacity: false)
+                ColorPicker("Background", selection: colorBinding(\.background), supportsOpacity: false)
+                ColorPicker("Cards", selection: colorBinding(\.card), supportsOpacity: false)
+                Toggle("Same colors in Light and Dark", isOn: $look.appearance.sameInBoth)
+            } footer: {
+                Text("Colors you pick here are for \(look.appearance.sameInBoth ? "both Light and Dark mode" : (scheme == .dark ? "Dark mode" : "Light mode")). Main color is for rings, charts, icons and selected buttons; Text is for words, and fainter text is a lighter shade of it; Accent is for highlights, the selected tab and falling prices.")
+            }
+            .listRowBackground(Theme.card)
+
+            Section("Preview") {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Ring(progress: 0.72, lineWidth: 5)
+                            Text("72").font(Theme.number(15)).foregroundStyle(Theme.text)
+                        }
+                        .frame(width: 58, height: 58)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Morning tech briefing").scoutLabel()
+                            Text("The day's biggest stories, at a glance").font(Theme.headline(17)).foregroundStyle(Theme.text)
+                        }
+                    }
+                    Text("Top stories").font(.system(size: 20, weight: .heavy)).foregroundStyle(Theme.accent)
+                    Text("Times and sources use a lighter shade of the text color.")
+                        .font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    HStack(spacing: 8) {
+                        Text("Selected").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.background)
+                            .padding(.horizontal, 12).frame(height: 28).background(Theme.ink, in: Capsule())
+                        Text("Not selected").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text)
+                            .padding(.horizontal, 12).frame(height: 28).background(Theme.track, in: Capsule())
+                    }
+                }
+                .padding(.vertical, 6)
+            }
+            .listRowBackground(Theme.card)
+
+            Section {
+                Button("Reset to original colors", role: .destructive) { withAnimation { look.reset() } }
+                    .foregroundStyle(.red)
+            }
+            .listRowBackground(Theme.card)
+        }
+        .scrollContentBackground(.hidden)
+        .foregroundStyle(Theme.text)
+        .background(Theme.background.ignoresSafeArea())
+        .navigationTitle("Custom colors")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Edits the palette for the current appearance (or both, when they're shared).
+    private func edit(_ change: (inout PaletteColors) -> Void) {
+        var a = look.appearance
+        a.presetID = "custom"
+        if a.sameInBoth || scheme != .dark { change(&a.light) }
+        if a.sameInBoth || scheme == .dark { change(&a.dark) }
+        look.appearance = a
+    }
+
+    private func colorBinding(_ key: WritableKeyPath<PaletteColors, RGBA>) -> Binding<Color> {
+        Binding(
+            get: { look.appearance.colors(for: scheme == .dark ? .dark : .light)[keyPath: key].color },
+            set: { new in edit { $0[keyPath: key] = RGBA(new) } }
+        )
+    }
+
+    private var textBinding: Binding<Color> {
+        Binding(
+            get: { look.appearance.colors(for: scheme == .dark ? .dark : .light).textColor.color },
+            set: { new in edit { $0.text = RGBA(new) } }
+        )
+    }
+
+    private var accentBinding: Binding<Color> {
+        Binding(
+            get: { look.appearance.accent.color },
+            set: { new in
+                look.appearance.presetID = "custom"
+                look.appearance.accent = RGBA(new)
+            }
+        )
     }
 }

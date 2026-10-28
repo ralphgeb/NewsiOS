@@ -145,7 +145,7 @@ struct SourceLine: View {
             Favicon(host: story.lead?.host)
             Text(story.outletName)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.ink.opacity(0.75))
+                .foregroundStyle(Theme.text.opacity(0.75))
                 .lineLimit(1)
             if story.outletCount > 1 {
                 Text("+\(story.outletCount - 1)")
@@ -180,7 +180,7 @@ struct StatusPill: View {
                 .padding(.horizontal, 8)
                 .frame(height: 20)
                 .background(story.status == "denied" ? Theme.accent.opacity(0.15) : Theme.track, in: Capsule())
-                .foregroundStyle(story.status == "denied" ? Theme.accent : Theme.ink)
+                .foregroundStyle(story.status == "denied" ? Theme.accent : Theme.text)
         }
     }
 
@@ -208,7 +208,7 @@ struct TickerChips: View {
                         Image(systemName: Direction.arrow(k.direction)).font(.system(size: 8, weight: .bold))
                             .foregroundStyle(k.direction == "down" ? Theme.accent : Theme.ink)
                         Text(k.ticker).font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(Theme.ink.opacity(0.75))
+                            .foregroundStyle(Theme.text.opacity(0.75))
                     }
                     .padding(.horizontal, 6)
                     .frame(height: 20)
@@ -250,7 +250,7 @@ struct OddsBar: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(story.verdict).font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p < 0.35 ? Theme.accent : Theme.ink)
+                    .foregroundStyle(p < 0.35 ? Theme.accent : Theme.text)
                 Spacer()
                 Text("\(story.outletCount) outlet\(story.outletCount > 1 ? "s" : "") · \(Format.ago(story.updated))")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.secondary)
@@ -281,7 +281,7 @@ struct HeroCard: View {
                 SourceLine(story: story)
                 Text(story.title)
                     .font(Theme.headline(21))
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(Theme.text)
                     .fixedSize(horizontal: false, vertical: true)
                 if let summary = story.summary, !summary.isEmpty {
                     Text(summary)
@@ -320,7 +320,7 @@ struct StoryRow: View {
                 SourceLine(story: story)
                 Text(story.title)
                     .font(Theme.headline(16))
-                    .foregroundStyle(Theme.ink)
+                    .foregroundStyle(Theme.text)
                     .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
                 if let text, !text.isEmpty {
@@ -401,7 +401,7 @@ struct EmptyCard: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: symbol).font(.system(size: 26, weight: .light)).foregroundStyle(Theme.tertiary)
-            Text(title).font(Theme.headline(18)).foregroundStyle(Theme.ink)
+            Text(title).font(Theme.headline(18)).foregroundStyle(Theme.text)
             Text(text).font(.system(size: 14)).foregroundStyle(Theme.secondary).multilineTextAlignment(.center)
         }
         .padding(.vertical, 36)
@@ -433,7 +433,7 @@ struct CapsuleSwitcher<Item: Hashable & Identifiable>: View {
                             if badge(item) > 0 {
                                 Text("\(badge(item))")
                                     .font(.system(size: 11, weight: .bold))
-                                    .foregroundStyle(on ? Theme.ink : Theme.background)
+                                    .foregroundStyle(on ? Theme.text : Theme.background)
                                     .padding(.horizontal, 5)
                                     .frame(minWidth: 18, minHeight: 18)
                                     .background(on ? Theme.background : Theme.accent, in: Capsule())
@@ -442,7 +442,7 @@ struct CapsuleSwitcher<Item: Hashable & Identifiable>: View {
                         .font(.system(size: 14, weight: .semibold))
                         .padding(.horizontal, 14)
                         .frame(height: 34)
-                        .foregroundStyle(on ? Theme.background : Theme.ink)
+                        .foregroundStyle(on ? Theme.background : Theme.text)
                         .background {
                             if on {
                                 Capsule().fill(Theme.ink).matchedGeometryEffect(id: "on", in: ns)
