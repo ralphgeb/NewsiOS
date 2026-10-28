@@ -134,8 +134,9 @@ final class WeatherModel: NSObject, ObservableObject {
         guard let base = StocksRequests.url,
               var c = URLComponents(url: base.appending(path: "weather"), resolvingAgainstBaseURL: false) else { return nil }
         c.queryItems = [
-            .init(name: "lat", value: String(format: "%.3f", spot.coordinate.latitude)),
-            .init(name: "lon", value: String(format: "%.3f", spot.coordinate.longitude)),
+            // about 1 km is plenty: the service shares one forecast per ~5 km square
+            .init(name: "lat", value: String(format: "%.2f", spot.coordinate.latitude)),
+            .init(name: "lon", value: String(format: "%.2f", spot.coordinate.longitude)),
             .init(name: "tz", value: timeZone),
         ]
         guard let url = c.url, let result = try? await URLSession.shared.data(from: url),
@@ -373,7 +374,7 @@ struct WeatherCard: View {
             WeatherIcon(name: "partly-day", size: 40)
             VStack(alignment: .leading, spacing: 3) {
                 Text("Weather where you are").font(.system(size: 16, weight: .bold)).foregroundStyle(Theme.text)
-                Text("Allow your location for the forecast here. It stays on this iPhone.")
+                Text("Allow your location for the forecast here. Only your rough area is used, and it isn't kept.")
                     .font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 Button { weather.requestPermission() } label: {
                     Text("Allow location")

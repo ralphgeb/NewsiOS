@@ -90,7 +90,9 @@ struct RootView: View {
     @EnvironmentObject private var weather: WeatherModel
     @EnvironmentObject private var tube: TubeService
     @State private var showSettings = false
-    @State private var showTopics = !Shared.hasChosenTopic
+    /// The welcome pages run once, before anything asks for a permission.
+    @AppStorage("onboarded") private var onboarded = false
+    @State private var showTopics = UserDefaults.standard.bool(forKey: "onboarded") && !Shared.hasChosenTopic
     @State private var tab = 0
 
     var body: some View {
@@ -126,6 +128,17 @@ struct RootView: View {
                 .environmentObject(weather)
                 .environmentObject(tube)
                 .preferredColorScheme(look.appearance.mode.colorScheme)
+        }
+        .fullScreenCover(isPresented: Binding(get: { !onboarded }, set: { if !$0 { onboarded = true } })) {
+            OnboardingView {
+                onboarded = true
+                // then the topic for Today, once the welcome has gone
+                if !Shared.hasChosenTopic {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { showTopics = true }
+                }
+            }
+            .environmentObject(weather)
+            .preferredColorScheme(look.appearance.mode.colorScheme)
         }
         .sheet(isPresented: $showTopics) {
             TopicPicker()

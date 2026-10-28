@@ -36,7 +36,7 @@ targets:
         BGTaskSchedulerPermittedIdentifiers:
           - com.ralphgeb.scout.refresh
         ITSAppUsesNonExemptEncryption: false
-        NSLocationWhenInUseUsageDescription: Scout uses your location for the weather card on Today. It's only used on this iPhone.
+        NSLocationWhenInUseUsageDescription: Scout uses your location only to show the weather for your area on Today. Just your rough area is used, and it isn't kept.
         ScoutDataURL: $(SCOUT_DATA_URL)
         ScoutStocksURL: $(SCOUT_STOCKS_URL)
         CFBundleURLTypes:
