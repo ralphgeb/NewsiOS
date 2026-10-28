@@ -329,7 +329,7 @@ final class StocksStore: ObservableObject {
     func name(_ symbol: String) -> String {
         if let q = file?.quotes[symbol] { return q.displayName }
         if let n = StockNames.known[symbol] ?? names[symbol] { return n }
-        if let m = (movers.up + movers.down).first(where: { $0.symbol == symbol }) { return m.name }
+        if let m = ((prices?.movers?.up ?? []) + (prices?.movers?.down ?? [])).first(where: { $0.symbol == symbol }) { return m.name }
         return firstLook[symbol]?.displayName ?? symbol
     }
 
