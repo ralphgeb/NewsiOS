@@ -17,20 +17,48 @@ struct OnboardingView: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.smooth, value: page)
 
-            HStack(spacing: 7) {
-                ForEach(0..<3) { i in
-                    Capsule()
-                        .fill(i == page ? Theme.ink : Theme.track)
-                        .frame(width: i == page ? 18 : 7, height: 7)
+            // dots on the left say there's more to swipe; the next step sits small on the right
+            HStack(alignment: .center) {
+                HStack(spacing: 6) {
+                    ForEach(0..<3) { i in
+                        Capsule()
+                            .fill(i == page ? Theme.ink : Theme.ink.opacity(0.18))
+                            .frame(width: i == page ? 16 : 6, height: 6)
+                    }
                 }
+                .animation(.snappy, value: page)
+                .accessibilityLabel("Page \(page + 1) of 3")
+                Spacer()
+                if page == 2 {
+                    Button("Not now") { finish() }
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Theme.secondary)
+                        .padding(.trailing, 14)
+                }
+                Button {
+                    if page < 2 {
+                        page += 1
+                    } else {
+                        weather.requestPermission()
+                        finish()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(page < 2 ? "Next" : "Allow location")
+                        Image(systemName: "arrow.right").font(.system(size: 13, weight: .semibold))
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .padding(.horizontal, 18)
+                    .frame(height: 40)
+                    .background(Theme.ink, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .foregroundStyle(Theme.background)
+                }
+                .buttonStyle(PressStyle())
             }
-            .animation(.snappy, value: page)
-            .padding(.bottom, 22)
-
-            buttons
-                .padding(.horizontal, 24)
-                .padding(.bottom, 12)
+            .padding(.horizontal, 28)
+            .padding(.bottom, 18)
         }
+        .fontDesign(.default)
         .background(Theme.background.ignoresSafeArea())
         .sensoryFeedback(.selection, trigger: page)
     }
@@ -38,18 +66,18 @@ struct OnboardingView: View {
     // MARK: Pages
 
     private var welcome: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 26) {
             Spacer()
             ScoutLogo()
-                .frame(width: 168, height: 168)
+                .frame(width: 150, height: 150)   // the drawing fills about half: a logo of ~75 pt
             Reveal(delay: 1.1) {
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     Text("Scout")
-                        .font(Theme.headline(40, weight: .heavy))
-                        .tracking(-0.8)
+                        .font(.system(size: 28, weight: .semibold))
+                        .tracking(-0.3)
                         .foregroundStyle(Theme.text)
                     Text("Your morning news, simplified.")
-                        .font(.system(size: 17, weight: .medium))
+                        .font(.system(size: 15))
                         .foregroundStyle(Theme.secondary)
                 }
             }
@@ -60,91 +88,62 @@ struct OnboardingView: View {
     }
 
     private var howItWorks: some View {
-        VStack(alignment: .leading, spacing: 26) {
+        VStack(alignment: .leading, spacing: 24) {
             Spacer()
             Text("One calm read\nwith your coffee")
-                .font(Theme.headline(32, weight: .heavy))
-                .tracking(-0.6)
+                .font(.system(size: 26, weight: .semibold))
+                .tracking(-0.3)
                 .foregroundStyle(Theme.text)
+                .padding(.bottom, 4)
             point("sun.horizon", "A briefing by 7:00",
                   "Every morning Scout reads about 100 news sites and writes one briefing for Tech, Finance, World and Fashion: what happened, why it matters and what to watch.")
             point("cup.and.saucer", "It doesn't break news",
-                  "Scout gathers the night's breaking news into one short, clear front page, so you're up to date before your first coffee is finished.")
+                  "It gathers the night's breaking news into one short, clear front page, ready before your first coffee.")
             point("chart.line.uptrend.xyaxis", "The rest of your morning",
                   "The stocks you follow, the weather and the metro, all on Today.")
-            Spacer()
-        }
-        .padding(.horizontal, 28)
-    }
-
-    private var location: some View {
-        VStack(spacing: 22) {
-            Spacer()
-            ZStack {
-                Circle().fill(Theme.card).frame(width: 112, height: 112)
-                WeatherIcon(name: "partly-day", size: 64)
-            }
-            Text("Weather where you are")
-                .font(Theme.headline(30, weight: .heavy))
-                .tracking(-0.5)
-                .foregroundStyle(Theme.text)
-                .multilineTextAlignment(.center)
-            Text("Scout asks for your location only to show the weather for your area on Today. Just your rough area is used to fetch the forecast, and it isn't kept.\n\nWithout it, Scout shows the weather in London.")
-                .font(.system(size: 16))
-                .foregroundStyle(Theme.text.opacity(0.75))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
             Spacer()
         }
         .padding(.horizontal, 32)
     }
 
+    private var location: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            WeatherIcon(name: "partly-day", size: 54)
+                .padding(.bottom, 6)
+            Text("Weather where you are")
+                .font(.system(size: 26, weight: .semibold))
+                .tracking(-0.3)
+                .foregroundStyle(Theme.text)
+                .multilineTextAlignment(.center)
+            Text("Scout asks for your location only to show the weather for your area on Today. Just your rough area is used to fetch the forecast, and it isn't kept.\n\nWithout it, Scout shows the weather in London.")
+                .font(.system(size: 15))
+                .lineSpacing(2)
+                .foregroundStyle(Theme.text.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Spacer()
+        }
+        .padding(.horizontal, 36)
+    }
+
     private func point(_ symbol: String, _ title: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: 14) {
             Image(systemName: symbol)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 17, weight: .regular))
                 .foregroundStyle(Theme.accent)
-                .frame(width: 30)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
-                Text(text).font(.system(size: 15)).foregroundStyle(Theme.text.opacity(0.7))
+                .frame(width: 26)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                Text(text).font(.system(size: 14)).lineSpacing(1.5).foregroundStyle(Theme.text.opacity(0.65))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
-
-    // MARK: Buttons
-
-    @ViewBuilder private var buttons: some View {
-        VStack(spacing: 6) {
-            Button {
-                if page < 2 {
-                    page += 1
-                } else {
-                    weather.requestPermission()
-                    finish()
-                }
-            } label: {
-                Text(page < 2 ? "Next" : "Allow location")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
-                    .background(Theme.ink, in: Capsule())
-                    .foregroundStyle(Theme.background)
-            }
-            .buttonStyle(PressStyle())
-
-            Button(page < 2 ? " " : "Not now") { if page == 2 { finish() } }
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Theme.secondary)
-                .frame(height: 40)
-                .disabled(page < 2)
-        }
-    }
 }
 
-/// Scout's icon, alive: the spokes draw out from the hub, the white nodes breathe one after
+/// Scout's icon without its tile, in the main color, alive: the spokes draw out from the hub, the white nodes breathe one after
 /// another, and the red node glides in to its place. Slow and small on purpose.
 struct ScoutLogo: View {
     @State private var drawn = false
@@ -154,15 +153,14 @@ struct ScoutLogo: View {
 
     // The app icon's layout (tools/make_icon.py), on a 1024 grid, relative to the hub.
     private struct Node { let x: CGFloat; let y: CGFloat; let r: CGFloat; let colour: Color }
-    private static let navy = Color(red: 19 / 255, green: 27 / 255, blue: 44 / 255)
     private static let red = Color(red: 226 / 255, green: 85 / 255, blue: 85 / 255)
     private static let grey = Color(red: 149 / 255, green: 154 / 255, blue: 162 / 255)
     private static let nodes = [
-        Node(x: -200, y: -214, r: 70, colour: .white),
+        Node(x: -200, y: -214, r: 70, colour: Theme.ink),
         Node(x: 176, y: -168, r: 76, colour: red),
         Node(x: -232, y: 10, r: 44, colour: grey),
-        Node(x: -104, y: 262, r: 58, colour: .white),
-        Node(x: 176, y: 170, r: 54, colour: .white),
+        Node(x: -104, y: 262, r: 58, colour: Theme.ink),
+        Node(x: 176, y: 170, r: 54, colour: Theme.ink),
     ]
     private static let hub = CGPoint(x: 530, y: 500)
 
@@ -171,9 +169,6 @@ struct ScoutLogo: View {
             let k = geo.size.width / 1024
             let hub = CGPoint(x: Self.hub.x * k, y: Self.hub.y * k)
             ZStack {
-                RoundedRectangle(cornerRadius: geo.size.width * 0.225, style: .continuous)
-                    .fill(Self.navy)
-                    .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
                 ForEach(Array(Self.nodes.enumerated()), id: \.offset) { i, n in
                     let isRed = i == 1
                     // the red node starts further out, so it travels in towards the centre
@@ -181,7 +176,7 @@ struct ScoutLogo: View {
                     let end = CGPoint(x: hub.x + n.x * k * far, y: hub.y + n.y * k * far)
                     Path { p in p.move(to: hub); p.addLine(to: end) }
                         .trim(from: 0, to: drawn ? 1 : 0)
-                        .stroke(.white, style: StrokeStyle(lineWidth: 30 * k, lineCap: .round))
+                        .stroke(Theme.ink, style: StrokeStyle(lineWidth: 30 * k, lineCap: .round))
                     Circle()
                         .fill(n.colour)
                         .frame(width: n.r * 2 * k, height: n.r * 2 * k)
@@ -191,7 +186,7 @@ struct ScoutLogo: View {
                         .animation(reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever().delay(Double(i) * 0.35), value: breathe)
                 }
                 Circle()
-                    .fill(.white)
+                    .fill(Theme.ink)
                     .frame(width: 184 * k, height: 184 * k)
                     .scaleEffect(drawn ? (breathe ? 1.04 : 1) : 0.6)
                     .position(hub)

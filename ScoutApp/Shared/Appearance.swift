@@ -144,7 +144,7 @@ struct Appearance: Codable, Hashable {
         set { modeSetting = newValue }
     }
 
-    init(preset: Preset, numberStyle: NumberStyle = .rounded) {
+    init(preset: Preset, numberStyle: NumberStyle = .classic) {
         presetID = preset.id
         light = preset.light
         dark = preset.dark

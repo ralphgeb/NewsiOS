@@ -10,7 +10,7 @@ The native iPhone app for ScoutAI: your morning briefing on tech, finance, world
 - **Saved**: bookmark any story; it stays even after it leaves the news.
 - **Stories**: the picture, the AI summary with key points, the rumour check, the market impact (tap a company for every story that names it) and every outlet covering it. Swipe left and right between stories. The button at the bottom opens the original article in Safari, in Reader view if you like.
 - **Settings**: the same Appearance section as Halo (Automatic, Light or Dark, six presets, four typefaces, and a Custom colors page for your own main, text, accent, background and card colours in Light and Dark), your Today topic, news interests, weather location, metro city, Reader view and the morning briefing notification.
-- **Welcome**: on first launch, before any permission is asked: the logo drawing itself (the red node gliding in, the others gently pulsing), "Your morning news, simplified", how Scout works, and why it asks for your location (the weather). Then the Today topic.
+- **Welcome**: on first launch, before any permission is asked: the logo drawing itself, without its tile (the red node gliding in, the others gently pulsing), "Your morning news, simplified", how Scout works, and why it asks for your location (the weather). Then the Today topic.
 - **Widget**: your briefing's headline and top stories (small, medium, large and Lock Screen), in your colours.
 
 SwiftUI, iOS 17+, no third-party libraries.
