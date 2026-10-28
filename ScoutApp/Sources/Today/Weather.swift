@@ -345,6 +345,8 @@ struct WeatherCard: View {
     @EnvironmentObject private var weather: WeatherModel
     @State private var attribution: URL?
     @AppStorage("weather.showRain") private var showRain = false
+    /// Tap the top of the card to fold away the chart, like the metro card, so more news fits.
+    @AppStorage("weather.compact") private var compact = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -388,12 +390,15 @@ struct WeatherCard: View {
     }
 
     private func report(_ r: WeatherModel.Report) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: compact ? 10 : 14) {
+            Button {
+                withAnimation(.snappy) { compact.toggle() }
+            } label: {
             HStack(alignment: .center, spacing: 14) {
-                WeatherIcon(name: WeatherCode.icon(r.code, day: r.isDay), size: 52)
+                WeatherIcon(name: WeatherCode.icon(r.code, day: r.isDay), size: compact ? 36 : 52)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("\(Int(r.temperature.rounded()))°")
-                        .font(Theme.number(44, weight: .bold))
+                        .font(Theme.number(compact ? 30 : 44, weight: .bold))
                         .tracking(-1)
                         .foregroundStyle(Theme.text)
                         .contentTransition(.numericText())
@@ -407,6 +412,10 @@ struct WeatherCard: View {
                             Image(systemName: "location.fill").font(.system(size: 9))
                         }
                         Text(r.place).lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Theme.tertiary)
+                            .rotationEffect(.degrees(compact ? 0 : 180))
                     }
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Theme.text)
@@ -419,7 +428,12 @@ struct WeatherCard: View {
                     }
                 }
             }
-            if r.hours.count > 4 {
+            .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(compact ? "Shows the next 24 hours" : "Folds away the chart")
+            .sensoryFeedback(.impact(weight: .light), trigger: compact)
+            if r.hours.count > 4, !compact {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text(showRain ? rainSummary(r.hours) : tempSummary(r.hours))

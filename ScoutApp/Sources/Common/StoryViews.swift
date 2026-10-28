@@ -23,15 +23,14 @@ extension View {
 }
 
 extension Format {
-    /// "Morning briefing compiled at 05:13", "Briefing compiled yesterday at 17:02" or "… Mon at 05:13"
-    static func compiled(_ date: Date) -> String {
+    /// The News page's line: "Your morning briefing", or which day's it is when it's older.
+    static func briefing(_ date: Date) -> String {
         let cal = Calendar.current
-        if cal.isDateInToday(date) {
-            let h = cal.component(.hour, from: date)
-            return "\(h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening") briefing compiled at \(time(date))"
-        }
-        if cal.isDateInYesterday(date) { return "Briefing compiled yesterday at \(time(date))" }
-        return "Briefing compiled \(date.formatted(.dateTime.weekday(.abbreviated))) at \(time(date))"
+        let h = cal.component(.hour, from: date)
+        let part = h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"
+        if cal.isDateInToday(date) { return "Your \(part) briefing" }
+        if cal.isDateInYesterday(date) { return "Yesterday's \(part) briefing" }
+        return "Your briefing from \(date.formatted(.dateTime.weekday(.wide)))"
     }
 
     /// "Just now", "12m ago", "3h ago", "Yesterday", "4d ago"

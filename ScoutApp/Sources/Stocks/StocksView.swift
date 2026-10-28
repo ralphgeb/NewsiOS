@@ -45,14 +45,6 @@ struct StocksView: View {
                     SectionHead(title: "America's biggest companies", detail: "by market value")
                     StockList(symbols: stocks.top, editing: false)
                 }
-                if !stocks.movers.up.isEmpty {
-                    SectionHead(title: "Yesterday's biggest risers", detail: stocks.prices?.moversDay)
-                    MoverList(movers: stocks.movers.up)
-                }
-                if !stocks.movers.down.isEmpty {
-                    SectionHead(title: "Yesterday's biggest fallers", detail: stocks.prices?.moversDay)
-                    MoverList(movers: stocks.movers.down)
-                }
                 Text("Prices update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Tap a change to switch between %, the price change and market value. AI summaries are written each morning. Not financial advice.")
                     .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                     .multilineTextAlignment(.center).padding(.horizontal, 20)
@@ -97,45 +89,6 @@ struct StocksView: View {
                 .foregroundStyle(Theme.text)
         }
         .buttonStyle(PressStyle())
-    }
-}
-
-/// Yesterday's risers or fallers: the company, its price and how far it moved that day.
-struct MoverList: View {
-    let movers: [PriceList.Mover]
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(movers.enumerated()), id: \.element.id) { i, m in
-                NavigationLink(value: TickerRoute(ticker: m.symbol, name: m.name)) {
-                    HStack(spacing: 12) {
-                        Text("\(i + 1)").font(Theme.number(15, weight: .bold)).foregroundStyle(Theme.tertiary)
-                            .frame(width: 20, alignment: .leading)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(m.symbol).font(.system(size: 15, weight: .heavy)).foregroundStyle(Theme.text).lineLimit(1)
-                            Text(m.name).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
-                        }
-                        Spacer(minLength: 6)
-                        Text(m.price.formatted(.number.precision(.fractionLength(m.price >= 1000 ? 0 : 2))))
-                            .font(Theme.number(14, weight: .semibold)).foregroundStyle(Theme.text)
-                        Text((m.pct >= 0 ? "+" : "−") + abs(m.pct).formatted(.number.precision(.fractionLength(1))) + "%")
-                            .font(Theme.number(12, weight: .bold))
-                            .padding(.horizontal, 7)
-                            .frame(minWidth: 64, minHeight: 22)
-                            .background(m.pct < 0 ? Theme.accent : Theme.ink, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                            .foregroundStyle(m.pct < 0 ? Color.white : Theme.background)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 11)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressStyle())
-                if i < movers.count - 1 {
-                    Rectangle().fill(Theme.hairline).frame(height: 0.5).padding(.leading, 46)
-                }
-            }
-        }
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
 

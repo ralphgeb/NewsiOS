@@ -41,7 +41,7 @@ struct NewsView: View {
 
     private var subtitle: String {
         guard let u = store.updated else { return store.isLoading ? "Loading…" : "Waiting for the first update" }
-        return Format.compiled(u)
+        return Format.briefing(u)
     }
 
     private func go(to next: NewsSection) {

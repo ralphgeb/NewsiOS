@@ -340,7 +340,6 @@ final class StocksStore: ObservableObject {
 
     /// Stocks named in the latest stories.
     var inTheNews: [String] { file?.mentioned ?? [] }
-    var movers: (up: [PriceList.Mover], down: [PriceList.Mover]) { (prices?.movers?.up ?? [], prices?.movers?.down ?? []) }
     /// Whether the detailed list has it (charts, numbers, AI summary), not just a price.
     func isDetailed(_ symbol: String) -> Bool { file?.quotes[symbol] != nil }
 

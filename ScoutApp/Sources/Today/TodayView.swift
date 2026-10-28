@@ -386,18 +386,7 @@ struct CoverCard: View {
                 if page.editions.count > 1 { editionSwitch.padding(12) }
             }
 
-            if !page.intro.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(page.intro, id: \.self) { p in
-                        Text(p)
-                            .font(.system(size: 16))
-                            .lineSpacing(2)
-                            .foregroundStyle(Theme.text.opacity(0.85))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .padding(18)
-            }
+            // The overview stays on the News page, so Today is quicker to read.
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card)
