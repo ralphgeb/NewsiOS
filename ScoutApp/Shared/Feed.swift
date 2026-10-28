@@ -61,6 +61,13 @@ enum Feed {
 
     static let prices = "prices.json"
 
+    /// News and the briefing: from the Scout service first, which has them within a minute of each
+    /// update (GitHub's file server can serve a five-minute-old copy); GitHub when it can't answer.
+    static func fetchFresh(_ name: String) async throws -> Data {
+        if let data = await fetchFromService(name) { return data }
+        return try await fetch(name)
+    }
+
     /// stocks.json lives on the Scout service (updated every 30 minutes); GitHub's copy is the fallback.
     static func fetchStocks() async -> Data? {
         if let data = await fetchFromService(stocks) { return data }

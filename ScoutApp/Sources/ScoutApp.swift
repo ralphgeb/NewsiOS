@@ -20,7 +20,7 @@ struct ScoutApp: App {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshID, using: nil) { task in
             Self.scheduleRefresh()
             let work = Task {
-                if let data = try? await Feed.fetch(Feed.briefing), let b = Feed.decodeBriefing(data) {
+                if let data = try? await Feed.fetchFresh(Feed.briefing), let b = Feed.decodeBriefing(data) {
                     await Notifier.notifyIfNew(b)
                 }
                 WidgetCenter.shared.reloadTimelines(ofKind: Shared.widgetKind)

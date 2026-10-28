@@ -28,7 +28,7 @@ struct BriefingProvider: TimelineProvider {
         // The widget fetches the briefing itself, so it updates even when Scout isn't opened.
         Task {
             var digest = cachedDigest()
-            if let data = try? await Feed.fetch(Feed.briefing), let b = Feed.decodeBriefing(data) {
+            if let data = try? await Feed.fetchFresh(Feed.briefing), let b = Feed.decodeBriefing(data) {
                 digest = BriefingDigest(briefing: b, topic: Shared.topic) ?? digest
             }
             let entry = BriefingEntry(date: .now, digest: digest ?? .sample)

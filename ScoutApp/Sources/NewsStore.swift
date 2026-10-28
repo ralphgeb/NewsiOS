@@ -94,8 +94,8 @@ final class NewsStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            async let newsData = Feed.fetch(Feed.news)
-            async let briefingData = Feed.fetch(Feed.briefing)
+            async let newsData = Feed.fetchFresh(Feed.news)
+            async let briefingData = Feed.fetchFresh(Feed.briefing)
             let (n, b) = try await (newsData, briefingData)
             let decoded = await Task.detached(priority: .userInitiated) { () -> (NewsFile?, Briefing?) in
                 (try? Feed.decoder.decode(NewsFile.self, from: n), Feed.decodeBriefing(b))

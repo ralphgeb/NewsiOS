@@ -67,6 +67,7 @@ targets:
       properties:
         CFBundleDisplayName: Scout
         ScoutDataURL: $(SCOUT_DATA_URL)
+        ScoutStocksURL: $(SCOUT_STOCKS_URL)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     entitlements:
