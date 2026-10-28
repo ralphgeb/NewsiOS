@@ -35,6 +35,7 @@ struct SettingsView: View {
     @AppStorage(WeatherModel.modeKey) private var weatherMode = WeatherModel.Mode.location.rawValue
     @AppStorage(TransitCity.key) private var transitCity = TransitCity.automatic.rawValue
     @AppStorage("links.reader") private var reader = false
+    @AppStorage("onboarded") private var onboarded = true
     @AppStorage(Notifier.enabledKey) private var notify = false
     @State private var notifyNote: String?
 
@@ -47,6 +48,11 @@ struct SettingsView: View {
                 readingSection
                 notificationsSection
                 Section("How Scout works") {
+                    Button("Show the welcome again") {
+                        dismiss()
+                        // the welcome covers the app once Settings has closed
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onboarded = false }
+                    }
                     explainer("Today", "Each morning at 6:00 the ScoutAI updater reads about 100 news sites, and AI writes a front page for Tech, Finance, World and Fashion: the main events, the key stories and what to watch. Tech also gets an evening edition. Pull Today down to refresh.")
                     explainer("All", "Ranked by importance: how big the story is (an AI score and its market impact), how many outlets cover it, how recent it is, and a small boost for your interests. It loses half its weight every 30 hours. The sections run newest first.")
                     explainer("Rumour odds", "For unconfirmed stories the AI weighs who is reporting it, how many outlets agree and what the companies say. Likely is 65% and up, a toss-up 35 to 64%. When a rumour comes true or is denied, its label changes.")
