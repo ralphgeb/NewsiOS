@@ -68,6 +68,8 @@ struct SettingsView: View {
             }
             .tint(Theme.ink)
         }
+        // switches show "on" in the accent, here and on the pages inside Settings
+        .toggleStyle(SwitchToggleStyle(tint: Theme.accent))
     }
 
     // MARK: News
@@ -168,10 +170,13 @@ struct SettingsView: View {
                     swatches
                 }
             }
+
+            Button("Reset to original colors", role: .destructive) { withAnimation { look.reset() } }
+                .foregroundStyle(.red)
         } header: {
             Text("Appearance")
         } footer: {
-            Text("Pick a look, or make your own under Custom colors. The typeface is for headlines and numbers. The widgets follow too.")
+            Text("Pick a look, or make your own under Custom colors; Reset goes back to Scout's own. The typeface is for headlines and numbers. The widgets follow too.")
         }
         .listRowBackground(Theme.card)
     }
@@ -411,11 +416,6 @@ struct CustomColorsView: View {
             }
             .listRowBackground(Theme.card)
 
-            Section {
-                Button("Reset to original colors", role: .destructive) { withAnimation { look.reset() } }
-                    .foregroundStyle(.red)
-            }
-            .listRowBackground(Theme.card)
         }
         .scrollContentBackground(.hidden)
         .foregroundStyle(Theme.text)
