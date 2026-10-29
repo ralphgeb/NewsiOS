@@ -6,7 +6,8 @@ struct NewsView: View {
     @EnvironmentObject private var store: NewsStore
     @Binding var showSettings: Bool
     @AppStorage("news.section") private var sectionRaw = NewsSection.all.rawValue
-    @State private var limit = 40
+    /// How many stories each section shows, so a section you come back to is as long as you left it.
+    @State private var limits: [NewsSection: Int] = [:]
     @State private var forward = true
     @State private var showInterests = false
 
@@ -19,7 +20,8 @@ struct NewsView: View {
     var body: some View {
         NavigationStack {
             ScoutPage(showSettings: $showSettings, title: "News", subtitle: subtitle, pinnedHeight: 50,
-                      onRefresh: { await store.refresh() }, isRefreshing: store.isLoading) {
+                      onRefresh: { await store.refresh() }, isRefreshing: store.isLoading,
+                      pageKey: section.rawValue) {
                 CapsuleSwitcher(items: NewsSection.allCases, selection: sectionBinding, title: \.rawValue)
                     .frame(height: 46)
                     .padding(.bottom, 4)
@@ -48,10 +50,7 @@ struct NewsView: View {
         guard next != section else { return }
         let all = NewsSection.allCases
         forward = (all.firstIndex(of: next) ?? 0) > (all.firstIndex(of: section) ?? 0)
-        withAnimation(.snappy) {
-            sectionRaw = next.rawValue
-            limit = 40
-        }
+        withAnimation(.snappy) { sectionRaw = next.rawValue }
     }
 
     /// A clear sideways flick moves to the next or previous section.
@@ -70,7 +69,7 @@ struct NewsView: View {
     @ViewBuilder
     private func page(_ section: NewsSection) -> some View {
         let all = store.newsItems(section)
-        let items = Array(all.prefix(limit))
+        let items = Array(all.prefix(limits[section] ?? 40))
         let seq = items.map(\.id)
         VStack(spacing: 14) {
             if store.stories.isEmpty {
@@ -105,7 +104,7 @@ struct NewsView: View {
                 }
                 if all.count > items.count {
                     Button {
-                        withAnimation(.snappy) { limit += 40 }
+                        withAnimation(.snappy) { limits[section, default: 40] += 40 }
                     } label: {
                         Text("Show more stories")
                             .font(.system(size: 15, weight: .semibold))

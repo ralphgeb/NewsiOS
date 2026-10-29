@@ -14,7 +14,6 @@ struct StockDetailView: View {
     /// Apple Intelligence's quick summary, until Scout's own arrives.
     @State private var localSummary: OnDeviceSummary.Result?
     @State private var writing = false
-    @AppStorage("links.reader") private var reader = false
 
     private var symbol: String { route.ticker }
 
@@ -68,7 +67,7 @@ struct StockDetailView: View {
         .onAppear { points = chartPoints(range) }
         .onChange(of: range) { _, r in withAnimation(.snappy) { points = chartPoints(r) } }
         .onChange(of: stocks.file?.pricesUpdated) { _, _ in points = chartPoints(range) }
-        .sheet(item: $reading) { SafariView(url: $0.url, reader: reader).ignoresSafeArea() }
+        .sheet(item: $reading) { SafariView(url: $0.url).ignoresSafeArea() }
     }
 
     private func chartPoints(_ r: ChartRange) -> [ChartPoint] {

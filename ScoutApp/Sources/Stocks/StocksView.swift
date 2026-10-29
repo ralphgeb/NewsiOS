@@ -1,7 +1,7 @@
 import Charts
 import SwiftUI
 
-/// Markets along the top, your stocks, then the biggest US companies. Prices update every 30 minutes
+/// Markets along the top, your stocks, the stocks in the news, then the ten biggest US companies. Prices update every 30 minutes
 /// on weekdays; the page picks up each update while it's open.
 struct StocksView: View {
     @EnvironmentObject private var stocks: StocksStore
@@ -27,8 +27,8 @@ struct StocksView: View {
                 if !stocks.inTheNews.isEmpty {
                     let list = stocks.inTheNews
                     SectionHead(title: "In the news", detail: "named in Scout's stories")
-                    StockList(symbols: allNews ? list : Array(list.prefix(8)), editing: false)
-                    if list.count > 8 {
+                    StockList(symbols: allNews ? list : Array(list.prefix(15)), editing: false)
+                    if list.count > 15 {
                         Button {
                             withAnimation(.snappy) { allNews.toggle() }
                         } label: {
@@ -42,8 +42,8 @@ struct StocksView: View {
                     }
                 }
                 if !stocks.top.isEmpty {
-                    SectionHead(title: "America's biggest companies", detail: "by market value")
-                    StockList(symbols: stocks.top, editing: false)
+                    SectionHead(title: "Top ten companies", detail: "US, by market value")
+                    StockList(symbols: Array(stocks.top.prefix(10)), editing: false)
                 }
                 Text("Prices update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Tap a change to switch between %, the price change and market value. AI summaries are written each morning. Not financial advice.")
                     .font(.system(size: 12)).foregroundStyle(Theme.tertiary)

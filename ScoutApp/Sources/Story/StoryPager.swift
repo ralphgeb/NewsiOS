@@ -14,7 +14,6 @@ struct StoryPager: View {
     let route: StoryRoute
     @State private var current: String?
     @State private var reading: WebLink?
-    @AppStorage("links.reader") private var reader = false
 
     init(route: StoryRoute) {
         self.route = route
@@ -89,7 +88,7 @@ struct StoryPager: View {
             }
         }
         .sheet(item: $reading) { link in
-            SafariView(url: link.url, reader: reader).ignoresSafeArea()
+            SafariView(url: link.url).ignoresSafeArea()
         }
         .sensoryFeedback(.selection, trigger: current)
         .sensoryFeedback(.success, trigger: story.map { store.isSaved($0.id) } ?? false)
@@ -433,12 +432,9 @@ struct FlowLayout: Layout {
 
 struct SafariView: UIViewControllerRepresentable {
     let url: URL
-    var reader = false
 
     func makeUIViewController(context: Context) -> SFSafariViewController {
-        let config = SFSafariViewController.Configuration()
-        config.entersReaderIfAvailable = reader
-        let vc = SFSafariViewController(url: url, configuration: config)
+        let vc = SFSafariViewController(url: url)
         vc.preferredControlTintColor = UIColor(Theme.ink)
         vc.dismissButtonStyle = .close
         return vc

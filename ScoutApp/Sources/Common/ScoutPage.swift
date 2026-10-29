@@ -15,6 +15,9 @@ struct ScoutPage<Pinned: View, Content: View>: View {
     /// Called when the page is pulled down and let go.
     var onRefresh: (() async -> Void)? = nil
     var isRefreshing = false
+    /// Which page of several is showing (News's sections): each keeps its own place, and one
+    /// you haven't scrolled yet opens at the top.
+    var pageKey: String? = nil
     @ViewBuilder var pinned: () -> Pinned
     @ViewBuilder var content: () -> Content
 
@@ -32,9 +35,11 @@ struct ScoutPage<Pinned: View, Content: View>: View {
                     .background(GeometryReader { g in
                         Color.clear.preference(key: ScrollOffsetKey.self, value: -g.frame(in: .named("page")).minY)
                     })
+                    .background(alignment: .top) { Color.clear.frame(height: 1).id(RememberScroll.top) }
             }
             .coordinateSpace(name: "page")
             .modifier(TrackScrollOffset(offset: $offset))
+            .modifier(RememberScroll(key: pageKey, offset: offset))
             .modifier(ScrollRelease(offset: offset) { pulled in
                 if pulled > 64, let onRefresh { Task { await onRefresh() } }
             })
@@ -201,5 +206,43 @@ struct TrackScrollOffset: ViewModifier {
         } else {
             content.onPreferenceChange(ScrollOffsetKey.self) { offset = $0 }
         }
+    }
+}
+
+/// Keeps each page's scroll position (iOS 18) when the page key changes: back to where that page
+/// was left, or its top the first time. iOS 17 can't scroll to a position, so there every page
+/// opens at its top.
+struct RememberScroll: ViewModifier {
+    static let top = "scout.page.top"
+    let key: String?
+    let offset: CGFloat
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, *) {
+            content.modifier(RememberScroll18(key: key, offset: offset))
+        } else {
+            ScrollViewReader { proxy in
+                content.onChange(of: key) { _, _ in proxy.scrollTo(Self.top, anchor: .top) }
+            }
+        }
+    }
+}
+
+@available(iOS 18, *)
+private struct RememberScroll18: ViewModifier {
+    let key: String?
+    let offset: CGFloat
+    @State private var position = ScrollPosition(idType: String.self)
+    @State private var saved: [String: CGFloat] = [:]
+
+    func body(content: Content) -> some View {
+        content
+            .scrollPosition($position)
+            .onChange(of: key) { old, new in
+                if let old { saved[old] = offset }
+                let y = new.flatMap { saved[$0] } ?? 0
+                // once the new page is in place, so it's tall enough to scroll to
+                DispatchQueue.main.async { position.scrollTo(y: y) }
+            }
     }
 }

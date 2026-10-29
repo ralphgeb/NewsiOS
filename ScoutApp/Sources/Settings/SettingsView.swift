@@ -35,7 +35,6 @@ struct SettingsView: View {
     @AppStorage("today.hidden") private var hiddenCards = ""
     @AppStorage(WeatherModel.modeKey) private var weatherMode = WeatherModel.Mode.location.rawValue
     @AppStorage(TransitCity.key) private var transitCity = TransitCity.automatic.rawValue
-    @AppStorage("links.reader") private var reader = false
     @AppStorage("onboarded") private var onboarded = true
     @AppStorage(Notifier.enabledKey) private var notify = false
     @State private var notifyNote: String?
@@ -44,11 +43,10 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                notificationsSection
                 newsSection
                 appearanceSection
                 todaySection
-                readingSection
-                notificationsSection
                 Section("How Scout works") {
                     Button("Show the welcome again") {
                         dismiss()
@@ -247,17 +245,6 @@ struct SettingsView: View {
                 withAnimation(.snappy) { hiddenCards = set.sorted().joined(separator: ",") }
             }
         )
-    }
-
-    private var readingSection: some View {
-        Section {
-            Toggle("Open articles in Reader", isOn: $reader)
-        } header: {
-            Text("Reading")
-        } footer: {
-            Text("Opens the original article in Safari's Reader view when the site allows it.")
-        }
-        .listRowBackground(Theme.card)
     }
 
     private var notificationsSection: some View {

@@ -146,11 +146,11 @@ struct OnboardingView: View {
     }
 }
 
-/// Scout's icon without its tile, in the main color, alive: the spokes draw out from the hub, the white nodes breathe one after
-/// another, and the red node glides in to its place. Slow and small on purpose.
+/// Scout's icon without its tile, in the main color, alive: it grows out of the centre in one
+/// movement, the hub first and the spokes stretching out with their nodes on the end, then the
+/// nodes breathe gently. Still for Reduce Motion.
 struct ScoutLogo: View {
-    @State private var drawn = false
-    @State private var arrived = false
+    @State private var grown = false
     @State private var breathe = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -165,7 +165,7 @@ struct ScoutLogo: View {
         Node(x: -104, y: 262, r: 58, colour: Theme.ink),
         Node(x: 176, y: 170, r: 54, colour: Theme.ink),
     ]
-    private static let hub = CGPoint(x: 530, y: 500)
+    private static let hub = CGPoint(x: 518, y: 518)   // the drawing's centre, so it grows from the middle
 
     var body: some View {
         GeometryReader { geo in
@@ -173,40 +173,58 @@ struct ScoutLogo: View {
             let hub = CGPoint(x: Self.hub.x * k, y: Self.hub.y * k)
             ZStack {
                 ForEach(Array(Self.nodes.enumerated()), id: \.offset) { i, n in
-                    let isRed = i == 1
-                    // the red node starts further out, so it travels in towards the centre
-                    let far: CGFloat = isRed && !arrived ? 1.7 : 1
-                    let end = CGPoint(x: hub.x + n.x * k * far, y: hub.y + n.y * k * far)
-                    Path { p in p.move(to: hub); p.addLine(to: end) }
-                        .trim(from: 0, to: drawn ? 1 : 0)
+                    // each spoke follows a moment after the last, so it unfolds rather than snaps
+                    let grow = Animation.spring(duration: 1.9, bounce: 0.18).delay(0.25 + Double(i) * 0.09)
+                    let t: CGFloat = grown ? 1 : 0
+                    let end = CGPoint(x: hub.x + n.x * k * t, y: hub.y + n.y * k * t)
+                    Spoke(from: hub, to: CGPoint(x: hub.x + n.x * k, y: hub.y + n.y * k), progress: t)
                         .stroke(Theme.ink, style: StrokeStyle(lineWidth: 30 * k, lineCap: .round))
+                        .animation(grow, value: grown)
                     Circle()
                         .fill(n.colour)
                         .frame(width: n.r * 2 * k, height: n.r * 2 * k)
-                        .scaleEffect(drawn ? (breathe && !isRed ? 1.08 : 1) : 0.2)
-                        .opacity(isRed ? (arrived ? 1 : 0) : (drawn ? 1 : 0))
+                        .scaleEffect(grown ? 1 : 0.15)
                         .position(end)
-                        .animation(reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever().delay(Double(i) * 0.35), value: breathe)
+                        .animation(grow, value: grown)
+                        .scaleEffect(breathe ? 1.07 : 1)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 2.8).repeatForever().delay(Double(i) * 0.4), value: breathe)
                 }
                 Circle()
                     .fill(Theme.ink)
                     .frame(width: 184 * k, height: 184 * k)
-                    .scaleEffect(drawn ? (breathe ? 1.04 : 1) : 0.6)
+                    .scaleEffect(grown ? 1 : 0.01)
+                    .animation(.spring(duration: 1.4, bounce: 0.25), value: grown)
+                    .scaleEffect(breathe ? 1.04 : 1)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 2.8).repeatForever(), value: breathe)
                     .position(hub)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 2.4).repeatForever(), value: breathe)
             }
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityLabel("Scout")
         .onAppear {
-            guard !drawn else { return }
-            if reduceMotion {
-                drawn = true; arrived = true
-                return
-            }
-            withAnimation(.easeOut(duration: 0.9)) { drawn = true }
-            withAnimation(.spring(duration: 1.4, bounce: 0.15).delay(0.5)) { arrived = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { breathe = true }
+            guard !grown else { return }
+            if reduceMotion { grown = true; return }
+            grown = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { breathe = true }
+        }
+    }
+}
+
+/// A line from the hub that stretches out to its node as progress goes from 0 to 1.
+private struct Spoke: Shape {
+    let from: CGPoint
+    let to: CGPoint
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        Path { p in
+            p.move(to: from)
+            p.addLine(to: CGPoint(x: from.x + (to.x - from.x) * progress, y: from.y + (to.y - from.y) * progress))
         }
     }
 }
