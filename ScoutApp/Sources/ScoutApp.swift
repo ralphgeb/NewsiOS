@@ -12,6 +12,7 @@ struct ScoutApp: App {
     @StateObject private var weather = WeatherModel()
     @StateObject private var tube = TubeService()
     @StateObject private var stocks = StocksStore()
+    @AppStorage("onboarded") private var onboarded = false
     private static let refreshID = "com.ralphgeb.scout.refresh"
 
     init() {
@@ -32,7 +33,15 @@ struct ScoutApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            Group {
+                // A new install opens straight on the welcome, with nothing of the app behind it.
+                if onboarded {
+                    RootView().transition(.opacity)
+                } else {
+                    OnboardingView { withAnimation(.easeInOut(duration: 0.5)) { onboarded = true } }
+                        .transition(.opacity)
+                }
+            }
                 .environmentObject(store)
                 .environmentObject(look)
                 .environmentObject(weather)
@@ -90,9 +99,8 @@ struct RootView: View {
     @EnvironmentObject private var weather: WeatherModel
     @EnvironmentObject private var tube: TubeService
     @State private var showSettings = false
-    /// The welcome pages run once, before anything asks for a permission.
-    @AppStorage("onboarded") private var onboarded = false
-    @State private var showTopics = UserDefaults.standard.bool(forKey: "onboarded") && !Shared.hasChosenTopic
+    /// Straight after the welcome, a new install picks Today's topic.
+    @State private var showTopics = !Shared.hasChosenTopic
     @State private var tab = 0
 
     var body: some View {
@@ -129,17 +137,6 @@ struct RootView: View {
                 .environmentObject(tube)
                 .preferredColorScheme(look.appearance.mode.colorScheme)
         }
-        .fullScreenCover(isPresented: Binding(get: { !onboarded }, set: { if !$0 { onboarded = true } })) {
-            OnboardingView {
-                onboarded = true
-                // then the topic for Today, once the welcome has gone
-                if !Shared.hasChosenTopic {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { showTopics = true }
-                }
-            }
-            .environmentObject(weather)
-            .preferredColorScheme(look.appearance.mode.colorScheme)
-        }
         .sheet(isPresented: $showTopics) {
             TopicPicker()
                 .environmentObject(store)
@@ -148,7 +145,10 @@ struct RootView: View {
                 .preferredColorScheme(look.appearance.mode.colorScheme)
         }
         .onOpenURL { url in
-            // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://saved
+            // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://saved.
+            // Settings closes and the page goes back to its top, wherever you'd left it.
+            showSettings = false
+            NotificationCenter.default.post(name: .scoutShowPage, object: url.host ?? "today")
             switch url.host {
             case "news": tab = 1
             case "stocks": tab = 2
@@ -157,4 +157,9 @@ struct RootView: View {
             }
         }
     }
+}
+
+extension Notification.Name {
+    /// A widget was tapped: the named page shows its top (story pages close).
+    static let scoutShowPage = Notification.Name("scoutShowPage")
 }

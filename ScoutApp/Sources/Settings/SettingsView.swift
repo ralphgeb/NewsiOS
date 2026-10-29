@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import WeatherKit
 
 /// Publishes appearance changes so the whole app redraws in the new colors.
 @MainActor
@@ -38,6 +39,7 @@ struct SettingsView: View {
     @AppStorage("onboarded") private var onboarded = true
     @AppStorage(Notifier.enabledKey) private var notify = false
     @State private var notifyNote: String?
+    @State private var weatherSources: URL?
 
     var body: some View {
         NavigationStack {
@@ -218,10 +220,19 @@ struct SettingsView: View {
                 .onChange(of: transitCity) { _, _ in Task { await tube.refresh(force: true) } }
             }
             Toggle("Markets", isOn: cardShown("markets"))
+            // Apple Weather's credit, which Apple asks apps using its forecasts to show
+            HStack {
+                Text("\u{F8FF} Weather")
+                Spacer()
+                if let weatherSources {
+                    Link("Data sources", destination: weatherSources).foregroundStyle(Theme.secondary)
+                }
+            }
+            .task { weatherSources = try? await WeatherService.shared.attribution.legalPageURL }
         } header: {
             Text("On Today")
         } footer: {
-            Text("Weather from Apple Weather. Metro status live for London (TfL), New York (MTA) and Paris (Île-de-France Mobilités); Automatic picks the nearest, or London. Tap the metro card to fold it away. To move cards, or hide others, tap Edit on Today.")
+            Text("Weather from Apple Weather (Open-Meteo stands in if it can't answer). Tap the weather card for the 24-hour chart. Metro status live for London (TfL), New York (MTA) and Paris (Île-de-France Mobilités); Automatic picks the nearest, or London. Tap the metro card to fold it away. To move cards, or hide others, tap Edit on Today.")
         }
         .listRowBackground(Theme.card)
     }

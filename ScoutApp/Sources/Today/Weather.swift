@@ -344,7 +344,6 @@ struct PolylineShape: Shape {
 /// hours, or (tap it) the chance of rain hour by hour. Pull Today down to refresh.
 struct WeatherCard: View {
     @EnvironmentObject private var weather: WeatherModel
-    @State private var attribution: URL?
     @AppStorage("weather.showRain") private var showRain = false
     /// Tap the top of the card to fold away the chart, like the metro card, so more news fits.
     @AppStorage("weather.compact") private var compact = false
@@ -366,7 +365,6 @@ struct WeatherCard: View {
         }
         .scoutCard()
         .task { await weather.refresh() }
-        .task { attribution = try? await WeatherService.shared.attribution.legalPageURL }
     }
 
     private var permission: some View {
@@ -432,7 +430,7 @@ struct WeatherCard: View {
             .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityHint(compact ? "Shows the next 24 hours" : "Folds away the chart")
+            .accessibilityHint(compact ? "Shows the chart for the next 24 hours" : "Shows the next 12 hours as icons")
             .sensoryFeedback(.impact(weight: .light), trigger: compact)
             if r.hours.count > 4, !compact {
                 VStack(alignment: .leading, spacing: 10) {
@@ -453,20 +451,16 @@ struct WeatherCard: View {
                 }
                 .sensoryFeedback(.selection, trigger: showRain)
             }
-            HStack(spacing: 6) {
-                if weather.isDenied {
-                    Text("Location is off, so this is London. Change it in the Settings app.")
-                } else if r.fromApple {
-                    Text("\u{F8FF} Weather")
-                    if let attribution { Link("Data sources", destination: attribution).underline() }
-                } else {
-                    Text("Weather by Open-Meteo")
-                }
-                Spacer()
-                if weather.isLoading { ProgressView().controlSize(.mini) }
+            if compact, r.hours.count > 2 {
+                HourStrip(hours: Array(r.hours.prefix(13)))
+                    .transition(.opacity)
             }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(Theme.tertiary)
+            // Apple Weather's credit and data sources are in Settings › On Today.
+            if weather.isDenied {
+                Text("Location is off, so this is London. Change it in the Settings app.")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.tertiary)
+            }
         }
     }
 }
@@ -505,6 +499,30 @@ extension WeatherCard {
             return "No rain expected in the next 24 hours"
         }
         return "Rain most likely at \(top.time.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated)))) (\(top.rainChance)%)"
+    }
+}
+
+/// The folded card's row: an icon every two hours for the next 12, with the time and temperature.
+private struct HourStrip: View {
+    let hours: [WeatherModel.Hour]
+
+    var body: some View {
+        let marks = stride(from: 0, to: hours.count, by: 2).map { hours[$0] }
+        HStack(spacing: 0) {
+            ForEach(Array(marks.enumerated()), id: \.offset) { i, h in
+                VStack(spacing: 5) {
+                    Text(i == 0 ? "Now" : h.time.formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated))))
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(i == 0 ? Theme.accent : Theme.secondary)
+                    WeatherIcon(name: WeatherCode.icon(h.code, day: h.isDay), size: 22, color: Theme.ink.opacity(0.85))
+                    Text("\(Int(h.temperature.rounded()))°")
+                        .font(Theme.number(12, weight: .semibold)).foregroundStyle(Theme.text)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(marks.map { "\($0.time.formatted(date: .omitted, time: .shortened)) \(Int($0.temperature.rounded())) degrees" }
+            .joined(separator: ", "))
     }
 }
 

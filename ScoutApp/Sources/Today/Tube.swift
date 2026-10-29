@@ -206,7 +206,7 @@ struct TubeCard: View {
     @EnvironmentObject private var tube: TubeService
     @State private var open: String?
     /// Tap the card's top line to fold it into one compact strip, and again to open it.
-    @AppStorage("tube.compact") private var compact = false
+    @AppStorage("tube.compact") private var compact = true   // starts folded
 
     var body: some View {
         let bad = tube.lines.filter { $0.level > 0 }

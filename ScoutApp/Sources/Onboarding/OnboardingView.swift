@@ -70,12 +70,15 @@ struct OnboardingView: View {
             Spacer()
             ScoutLogo()
                 .frame(width: 150, height: 150)   // the drawing fills about half: a logo of ~75 pt
-            Reveal(delay: 1.1) {
-                VStack(spacing: 6) {
+            // the name, then the line, each fading up slowly once the logo has settled
+            VStack(spacing: 6) {
+                Reveal(delay: 1.8, duration: 1.8) {
                     Text("Scout")
                         .font(.system(size: 28, weight: .semibold))
                         .tracking(-0.3)
                         .foregroundStyle(Theme.text)
+                }
+                Reveal(delay: 3.0, duration: 1.8) {
                     Text("Your morning news, simplified.")
                         .font(.system(size: 15))
                         .foregroundStyle(Theme.secondary)
@@ -211,13 +214,14 @@ struct ScoutLogo: View {
 /// Fades its content up into place after a short wait.
 private struct Reveal<Content: View>: View {
     let delay: Double
+    var duration: Double = 0.8
     @ViewBuilder var content: Content
     @State private var shown = false
 
     var body: some View {
         content
             .opacity(shown ? 1 : 0)
-            .offset(y: shown ? 0 : 10)
-            .onAppear { withAnimation(.easeOut(duration: 0.8).delay(delay)) { shown = true } }
+            .offset(y: shown ? 0 : 6)
+            .onAppear { withAnimation(.easeInOut(duration: duration).delay(delay)) { shown = true } }
     }
 }

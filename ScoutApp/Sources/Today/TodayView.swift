@@ -48,6 +48,10 @@ struct TodayView: View {
             .storyDestinations()
         }
         .onChange(of: store.topic) { _, _ in editionID = nil }
+        // a widget tap shows Today from the top, closing any story you'd opened
+        .onReceive(NotificationCenter.default.publisher(for: .scoutShowPage)) { note in
+            if note.object as? String == "today" { path = NavigationPath(); editing = false }
+        }
         .onChange(of: editing) { _, on in if !on { dragging = nil; dragOffset = 0 } }
         .sheet(isPresented: $showTopics) { TopicPicker().environmentObject(store).presentationDetents([.medium, .large]) }
         .sensoryFeedback(.impact(weight: .light), trigger: orderRaw)
