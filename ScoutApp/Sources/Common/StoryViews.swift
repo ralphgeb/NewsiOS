@@ -222,20 +222,30 @@ struct TickerChips: View {
 struct SectionHead: View {
     let title: String
     var detail: String? = nil
+    /// A line under the title, on the left ("US, by market value").
+    var subtitle: String? = nil
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title)
-                .font(.system(size: 26, weight: .heavy))
-                .tracking(-0.5)
-                .foregroundStyle(Theme.accent)
-            Spacer()
-            if let detail {
-                Text(detail).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.tertiary)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.system(size: 26, weight: .heavy))
+                    .tracking(-0.5)
+                    .foregroundStyle(Theme.accent)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer()
+                if let detail {
+                    Text(detail).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.tertiary)
+                }
+            }
+            if let subtitle {
+                Text(subtitle).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
             }
         }
         .padding(.horizontal, 2)
         .padding(.top, 14)
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
 }

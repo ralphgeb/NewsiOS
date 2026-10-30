@@ -84,7 +84,7 @@ struct TodayView: View {
 
     private func isAvailable(_ card: TodayCard, _ page: FrontPage) -> Bool {
         switch card {
-        case .weather, .tube, .markets, .cover: return true
+        case .weather, .tube, .markets: return true
         case .top: return !page.items.isEmpty
         case .movers: return !page.movers.isEmpty
         case .brief: return !page.brief.isEmpty
@@ -241,12 +241,17 @@ struct TodayView: View {
         case .weather: WeatherCard()
         case .tube: TubeCard()
         case .markets: MarketsCard()
-        case .cover: CoverCard(page: page, sequence: seq, editionID: $editionID)
-        case .top: TopStoriesCard(items: page.items, sequence: seq, title: page.isWritten ? "Top stories" : "Key stories")
+        case .top: TopStoriesCard(items: topItems(page), sequence: seq, title: page.isWritten ? "Top stories" : "Key stories")
         case .movers: MoversCard(title: page.moversTitle, movers: page.movers)
         case .brief: InBriefCard(items: page.brief, sequence: seq)
         case .more: MoreCard(title: store.interests.isEmpty ? "More in \(store.topic.title)" : "More for you", stories: page.more, sequence: seq)
         }
+    }
+
+    /// Top stories opens Today: the cover story first (it had its own card before), then the rest.
+    private func topItems(_ page: FrontPage) -> [FrontPage.Item] {
+        guard let cover = page.cover, !page.items.contains(where: { $0.story?.id == cover.id }) else { return page.items }
+        return [FrontPage.Item(id: cover.id, story: cover, title: cover.title, text: store.reason(cover))] + page.items
     }
 
     private var waiting: some View {
@@ -302,7 +307,7 @@ struct CardHeightsKey: PreferenceKey {
 
 /// The cards on Today, in their default order.
 enum TodayCard: String, CaseIterable, Identifiable {
-    case weather, tube, cover, top, markets, movers, brief, more
+    case weather, tube, top, markets, movers, brief, more
 
     var id: String { rawValue }
 
@@ -311,7 +316,6 @@ enum TodayCard: String, CaseIterable, Identifiable {
         case .weather: return "Weather"
         case .tube: return "Metro status"
         case .markets: return "Markets"
-        case .cover: return "Briefing"
         case .top: return "Top stories"
         case .movers: return "Companies to watch"
         case .brief: return "In brief"

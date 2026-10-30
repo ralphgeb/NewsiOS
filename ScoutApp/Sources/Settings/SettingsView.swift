@@ -116,10 +116,13 @@ struct SettingsView: View {
                 }
                 Section {
                 } footer: {
-                    Text("Summaries, odds and market effects are written by AI in its own words and can be wrong. Not financial advice. Every story links to the original.")
+                    Text("Scout's summaries are written by AI, and it can get things wrong now and then, so please don't treat anything here as financial advice. Every story links to the original if you'd like to read more.")
                 }
             }
             .scrollContentBackground(.hidden)
+            // the same gap between every section, and Scout Plus close to the top
+            .listSectionSpacing(18)
+            .contentMargins(.top, 4, for: .scrollContent)
             .foregroundStyle(Theme.text)
             .background(Theme.background.ignoresSafeArea())
             .navigationTitle("Settings")
@@ -176,7 +179,7 @@ struct SettingsView: View {
             } else {
                 Button { showPlus = true } label: {
                     HStack(spacing: 12) {
-                        ScoutLogo().frame(width: 34, height: 34)
+                        ScoutLogo(animated: false).frame(width: 34, height: 34)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Get Scout Plus").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
                             Text("Every story, your stocks and your colours · \(Plus.price) a month")
@@ -633,5 +636,5 @@ private struct PreviewNote: View {
 enum AppIcons {
     struct Icon { let name: String; let alternate: String?; var preview: String { "IconPreview-\(name)" } }
     static let all: [Icon] = [Icon(name: "Scout", alternate: nil)] +
-        ["Graphite", "Ocean", "Forest", "Mono", "Dusk", "Sand"].map { Icon(name: $0, alternate: "AppIcon-\($0)") }
+        ["Graphite", "Greyscale", "Ocean", "Forest", "Mono", "Dusk", "Sand"].map { Icon(name: $0, alternate: "AppIcon-\($0)") }
 }

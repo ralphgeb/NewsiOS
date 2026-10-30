@@ -12,9 +12,9 @@ enum Plus {
 
     static var isActive: Bool { UserDefaults.standard.bool(forKey: key) }
 
-    /// "£1" in the UK, "$1" elsewhere.
+    /// Before the App Store answers: "£0.99" in the UK, "$0.99" elsewhere.
     static var price: String {
-        Locale.current.currency?.identifier == "GBP" ? "£1" : "$1"
+        Locale.current.currency?.identifier == "GBP" ? "£0.99" : "$0.99"
     }
 }
 
@@ -39,8 +39,17 @@ final class PlusStore: ObservableObject {
         Task { await load(); await refresh() }
     }
 
-    /// The price as the App Store shows it ("£0.99"), or ours until the product loads.
-    var price: String { product?.displayPrice ?? Plus.price }
+    /// The price in your own currency ("£0.99" in London). The App Store gives it in the currency of
+    /// the account's store, which for a TestFlight sandbox account can be another country's; the
+    /// UK and US prices are both 0.99, so there it's shown in your currency.
+    var price: String {
+        guard let product else { return Plus.price }
+        if let local = Locale.current.currency?.identifier, ["GBP", "USD"].contains(local),
+           product.priceFormatStyle.currencyCode != local {
+            return product.price.formatted(.currency(code: local))
+        }
+        return product.displayPrice
+    }
 
     func load() async {
         product = try? await Product.products(for: [Self.productID]).first
@@ -139,7 +148,8 @@ struct PlusSheet: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            ScoutLogo().frame(width: 56, height: 56).padding(.top, 22)
+            Spacer(minLength: 0)
+            ScoutLogo(animated: false).frame(width: 56, height: 56)
             if step == .done {
                 welcome.transition(.opacity.combined(with: .scale(scale: 0.96)))
             } else {
@@ -147,8 +157,8 @@ struct PlusSheet: View {
             }
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .background(Theme.background.ignoresSafeArea())
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)

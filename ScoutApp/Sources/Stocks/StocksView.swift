@@ -30,7 +30,7 @@ struct StocksView: View {
                 }
                 if !stocks.inTheNews.isEmpty {
                     let list = stocks.inTheNews
-                    SectionHead(title: "In the news", detail: "named in Scout's stories")
+                    SectionHead(title: "In the news", subtitle: "Named in Scout's stories")
                     StockList(symbols: allNews ? list : Array(list.prefix(15)), editing: false)
                     if list.count > 15 {
                         Button {
@@ -46,7 +46,7 @@ struct StocksView: View {
                     }
                 }
                 if !stocks.top.isEmpty {
-                    SectionHead(title: "Top ten companies", detail: "US, by market value")
+                    SectionHead(title: "Top ten companies", subtitle: "US, by market value")
                     StockList(symbols: Array(stocks.top.prefix(10)), editing: false)
                 }
                 Text("Prices update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Tap a change to switch between %, the price change and market value. AI summaries are written each morning. Not financial advice.")

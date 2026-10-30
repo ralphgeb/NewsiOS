@@ -182,8 +182,15 @@ struct OnboardingView: View {
 /// movement, the hub first and the spokes stretching out with their nodes on the end, then the
 /// nodes breathe gently. Still for Reduce Motion.
 struct ScoutLogo: View {
-    @State private var grown = false
+    @State private var grown: Bool
     @State private var breathe = false
+    private let animated: Bool
+
+    /// Still (fully drawn, no breathing) where it's just a mark, like the Scout Plus sheet.
+    init(animated: Bool = true) {
+        self.animated = animated
+        _grown = State(initialValue: !animated)
+    }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // The app icon's layout (tools/make_icon.py), on a 1024 grid, relative to the hub.
@@ -234,7 +241,7 @@ struct ScoutLogo: View {
         .aspectRatio(1, contentMode: .fit)
         .accessibilityLabel("Scout")
         .onAppear {
-            guard !grown else { return }
+            guard !grown, animated else { return }
             if reduceMotion { grown = true; return }
             grown = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { breathe = true }

@@ -30,6 +30,7 @@ NODES = [
 # for the red node. Each becomes an alternate app icon and a small preview for Settings.
 LOOKS = {
     "Graphite": ((18, 18, 20), (255, 97, 41)),
+    "Greyscale": ((44, 44, 46), (199, 199, 204)),
     "Ocean": ((14, 42, 71), (31, 200, 180)),
     "Forest": ((28, 51, 36), (232, 176, 74)),
     "Mono": ((0, 0, 0), (229, 72, 77)),
