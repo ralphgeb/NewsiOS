@@ -194,7 +194,7 @@ final class NewsStore: ObservableObject {
             return pool.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) }
         }
         let picked = pool.filter { matchesInterests($0) || ($0.importance ?? 0) >= 8 }
-        let scores = Dictionary(picked.map { ($0.id, rankScore($0, now: now) + (matchesInterests($0) ? 4 : 0)) }, uniquingKeysWith: { a, _ in a })
+        let scores = Dictionary(picked.map { ($0.id, rankScore($0, now: now) + (matchesInterests($0) ? 4 : 0) + Self.regionWeight($0)) }, uniquingKeysWith: { a, _ in a })
         var queue = picked.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) }
         // spread topics out: a story whose main topic matches the last three waits its turn
         var out: [Story] = []
@@ -204,6 +204,17 @@ final class NewsStore: ObservableObject {
             out.append(queue.remove(at: i))
         }
         return out
+    }
+
+    /// A small lift by where a story happens: the US first, then the UK, Europe and Asia.
+    static func regionWeight(_ s: Story) -> Double {
+        switch s.region {
+        case "US": return 1.6
+        case "UK": return 1.1
+        case "Global": return 0.8
+        case "Europe": return 0.5
+        default: return 0
+        }
     }
 
     /// The topic that put a story in For you, for the small line on its card.
