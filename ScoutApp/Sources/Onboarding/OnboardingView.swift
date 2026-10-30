@@ -7,6 +7,7 @@ struct OnboardingView: View {
     @EnvironmentObject private var store: NewsStore
     var finish: () -> Void
     @State private var page = 0
+    @State private var nextReady = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,9 +57,17 @@ struct OnboardingView: View {
                     .foregroundStyle(Theme.background)
                 }
                 .buttonStyle(PressStyle())
+                // on the first page, Next waits until the name and the line have faded in
+                .opacity(page > 0 || nextReady ? 1 : 0)
+                .disabled(page == 0 && !nextReady)
+                .animation(.easeInOut(duration: 0.6), value: nextReady)
             }
             .padding(.horizontal, 28)
             .padding(.bottom, 18)
+            .task {
+                try? await Task.sleep(for: .seconds(4.8))
+                nextReady = true
+            }
         }
         .fontDesign(.default)
         .background(Theme.background.ignoresSafeArea())

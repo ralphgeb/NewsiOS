@@ -68,7 +68,8 @@ struct Chip: View {
             withAnimation(.snappy(duration: 0.25)) { action() }
         } label: {
             HStack(spacing: 5) {
-                if on { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)) }
+                // always there (hidden when off), so ticking a bubble never moves the others
+                Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).opacity(on ? 1 : 0)
                 Text(title)
             }
             .font(.system(size: small ? 13 : 14, weight: .medium))

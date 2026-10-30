@@ -62,7 +62,7 @@ final class PlusStore: ObservableObject {
             if case .verified(let t) = result, t.productID == Self.productID, t.revocationDate == nil { active = true }
         }
         let d = UserDefaults.standard
-        if active {
+        if active, d.string(forKey: Plus.sourceKey) != "reset" {
             if !d.bool(forKey: Plus.key) { d.set(Date.now.timeIntervalSince1970, forKey: Plus.sinceKey) }
             d.set(true, forKey: Plus.key)
             d.set("store", forKey: Plus.sourceKey)
@@ -78,6 +78,7 @@ final class PlusStore: ObservableObject {
         guard let result = try? await product.purchase() else { return false }
         if case .success(let verification) = result, case .verified(let t) = verification {
             await t.finish()
+            UserDefaults.standard.set("store", forKey: Plus.sourceKey)
             await refresh()
             return true
         }

@@ -133,13 +133,14 @@ struct SettingsView: View {
                 appearanceSection
                 iconSection
                 todaySection
-                Section("About") {
-                    Button("Show the welcome again") {
-                        dismiss()
-                        // the welcome covers the app once Settings has closed
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onboarded = false }
-                    }
+                Section("How Scout works") {
+                    explainer("Today", "Each morning at 6:00 the ScoutAI updater reads about 150 news sites, and AI writes a briefing for Tech, Finance, World and Fashion (World and Finance cover the US, the UK, Europe and Asia). Today shows your For you front page: the main events, the key stories and what to watch. Pull Today down to refresh.")
+                    explainer("For you", "Stories on your topics, ranked by importance: how big the story is (an AI score and its market impact), how many outlets cover it and how recent it is. The day's very biggest stories are mixed in, and no more than three in a row share a topic. Scout reads about 150 news sites from the UK, the US, Europe and Asia. The sections run newest first.")
+                    explainer("Rumour odds", "For unconfirmed stories the AI weighs who is reporting it, how many outlets agree and what the companies say. Likely is 65% and up, a toss-up 35 to 64%. When a rumour comes true or is denied, its label changes.")
+                    explainer("Stocks", "Prices for about 3,500 stocks, indices, currencies and cryptos update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Stocks you follow, America's biggest companies and the stocks in the news also get charts and key numbers; the ones you follow and the biggest get an AI summary each morning.")
+                    explainer("Market impact", "Which companies a story could move, up or down, and by how much: one dot is low, three is high. Tap a company for every story that names it.")
                 }
+                .listRowBackground(Theme.card)
                 Section {
                 } footer: {
                     Text("Scout's summaries are written by AI, and it can get things wrong now and then, so please don't treat anything here as financial advice. Every story links to the original if you'd like to read more.")
@@ -186,6 +187,14 @@ struct SettingsView: View {
                     Spacer()
                     Text(sinceText).foregroundStyle(Theme.secondary)
                 }
+                Button("Reset to free (for testing)", role: .destructive) {
+                    withAnimation(.snappy) {
+                        hasPlus = false
+                        plusSource = "reset"   // an App Store test subscription is ignored until the next purchase
+                    }
+                    if UIApplication.shared.alternateIconName != nil { UIApplication.shared.setAlternateIconName(nil) }
+                }
+                .foregroundStyle(.red)
                 if plusSource == "store" {
                     Button("Manage subscription") {
                         Task {
@@ -194,13 +203,6 @@ struct SettingsView: View {
                             }
                         }
                     }
-                } else {
-                    Button("End test subscription", role: .destructive) {
-                        withAnimation(.snappy) { hasPlus = false }
-                        // back to the main icon, which comes free
-                        if UIApplication.shared.alternateIconName != nil { UIApplication.shared.setAlternateIconName(nil) }
-                    }
-                    .foregroundStyle(.red)
                 }
             } else {
                 Button { showPlus = true } label: {

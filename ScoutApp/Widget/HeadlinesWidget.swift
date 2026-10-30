@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 /// Your For you headlines on the Home Screen: the top stories on your topics, with the day's
-/// biggest mixed in, ranked like the app. Large shows seven, medium three.
+/// biggest mixed in, ranked like the app. Large shows four, medium two, each with the opening of the story.
 struct HeadlinesEntry: TimelineEntry {
     let date: Date
     let stories: [Line]
@@ -14,6 +14,8 @@ struct HeadlinesEntry: TimelineEntry {
         let title: String
         let outlet: String
         let published: Date
+        /// The first sentences of the story's summary.
+        var lead: String = ""
     }
 
     static let sample = HeadlinesEntry(date: .now, stories: [
@@ -40,6 +42,16 @@ struct HeadlinesProvider: TimelineProvider {
         }
     }
 
+    /// The first `n` sentences of a summary.
+    static func sentences(_ text: String, _ n: Int) -> String {
+        var out: [String] = []
+        text.enumerateSubstrings(in: text.startIndex..., options: .bySentences) { sub, _, _, stop in
+            if let sub { out.append(sub.trimmingCharacters(in: .whitespaces)) }
+            if out.count >= n { stop = true }
+        }
+        return out.joined(separator: " ")
+    }
+
     /// The same idea as For you in the app: importance, outlets, market impact and freshness,
     /// with a lift for your topics, and World and Finance only from your regions.
     static func entry(from data: Data?) -> HeadlinesEntry? {
@@ -62,7 +74,8 @@ struct HeadlinesProvider: TimelineProvider {
         }
         let top = pool.sorted { score($0) > score($1) }.prefix(7)
         return HeadlinesEntry(date: now,
-                              stories: top.map { .init(id: $0.id, title: $0.title, outlet: $0.outletName, published: $0.published) },
+                              stories: top.map { .init(id: $0.id, title: $0.title, outlet: $0.outletName, published: $0.published,
+                                                     lead: Self.sentences($0.summary ?? $0.claim ?? "", 2)) },
                               updated: file.updated)
     }
 }
@@ -89,8 +102,9 @@ struct HeadlinesView: View {
     private var accent: Color { entry.appearance.accent.color }
 
     var body: some View {
-        let count = family == .systemLarge ? 7 : 3
-        VStack(alignment: .leading, spacing: family == .systemLarge ? 9 : 7) {
+        let large = family == .systemLarge
+        let count = large ? 4 : 2
+        VStack(alignment: .leading, spacing: large ? 12 : 9) {
             HStack(spacing: 6) {
                 Circle().fill(accent).frame(width: 6, height: 6)
                 Text("For you" + (entry.updated.map { " · \(Format.time($0))" } ?? ""))
@@ -100,28 +114,27 @@ struct HeadlinesView: View {
                     .foregroundStyle(text.opacity(0.5))
             }
             ForEach(Array(entry.stories.prefix(count).enumerated()), id: \.element.id) { i, s in
-                HStack(alignment: .firstTextBaseline, spacing: 9) {
-                    Text("\(i + 1)")
-                        .font(.system(size: 13, weight: .bold).monospacedDigit())
-                        .foregroundStyle(i == 0 ? accent : text.opacity(0.3))
-                        .frame(width: 14, alignment: .leading)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(s.title)
-                            .font(Theme.headline(i == 0 && family == .systemLarge ? 15 : 13.5, weight: .semibold))
-                            .foregroundStyle(text)
-                            .lineLimit(2)
-                        Text("\(s.outlet) · \(s.published.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))")
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundStyle(text.opacity(0.45))
-                            .lineLimit(1)
+                VStack(alignment: .leading, spacing: 3) {
+                    // the headline in bold, then the opening of the story, lighter
+                    Text(s.title)
+                        .font(Theme.headline(large ? 15 : 14, weight: .bold))
+                        .foregroundStyle(text)
+                        .lineLimit(2)
+                    if !s.lead.isEmpty {
+                        Text(s.lead)
+                            .font(.system(size: large ? 12.5 : 12))
+                            .foregroundStyle(text.opacity(0.62))
+                            .lineLimit(large ? 2 : 1)
                     }
                 }
-                if family == .systemLarge, i < count - 1 {
-                    Rectangle().fill(palette.ink.color.opacity(0.08)).frame(height: 0.5).padding(.leading, 23)
+                if i < min(count, entry.stories.count) - 1 {
+                    Rectangle().fill(palette.ink.color.opacity(0.08)).frame(height: 0.5)
                 }
             }
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .containerBackground(for: .widget) { palette.background.color }
     }
