@@ -10,7 +10,7 @@ struct TodayView: View {
     @State private var showTopics = false
 
     // Edit mode, as in Halo: drag cards to reorder them, minus to hide one, plus to bring it back.
-    @AppStorage("today.cards.v2") private var orderRaw = ""
+    @AppStorage("today.cards.v3") private var orderRaw = ""   // v3: markets moved under top stories
     @AppStorage("today.hidden") private var hiddenRaw = ""
     @State private var editing = false
     @State private var dragging: TodayCard?
@@ -302,7 +302,7 @@ struct CardHeightsKey: PreferenceKey {
 
 /// The cards on Today, in their default order.
 enum TodayCard: String, CaseIterable, Identifiable {
-    case weather, tube, cover, markets, top, movers, brief, more
+    case weather, tube, cover, top, markets, movers, brief, more
 
     var id: String { rawValue }
 
@@ -386,9 +386,6 @@ struct CoverCard: View {
             }
             .buttonStyle(PressStyle())
             .disabled(page.cover == nil)
-            .overlay(alignment: .topTrailing) {
-                if page.editions.count > 1 { editionSwitch.padding(12) }
-            }
 
             // The overview stays on the News page, so Today is quicker to read.
         }
@@ -397,28 +394,6 @@ struct CoverCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
-    /// Morning or evening, when the day has both.
-    private var editionSwitch: some View {
-        HStack(spacing: 2) {
-            ForEach(page.editions.reversed()) { ed in
-                let on = ed.id == page.editionID
-                Button {
-                    withAnimation(.snappy) { editionID = ed.id }
-                } label: {
-                    Image(systemName: ed.isEvening ? "moon.fill" : "sun.max.fill")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 30, height: 24)
-                        .background(on ? Color.white : Color.clear, in: Capsule())
-                        .foregroundStyle(on ? Color.black : Color.white.opacity(0.8))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(ed.edition) briefing")
-            }
-        }
-        .padding(2)
-        .background(.ultraThinMaterial, in: Capsule())
-        .environment(\.colorScheme, .dark)
-    }
 }
 
 /// The briefing's top stories: the first two with pictures, the rest as numbered rows.
@@ -562,6 +537,7 @@ struct MoversCard: View {
 struct InBriefCard: View {
     let items: [FrontPage.Item]
     let sequence: [String]
+    @AppStorage(Plus.key) private var hasPlus = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -595,6 +571,8 @@ struct InBriefCard: View {
                 }
             }
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .locked(!hasPlus)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
     }
 }

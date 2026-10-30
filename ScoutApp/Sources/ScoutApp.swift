@@ -16,6 +16,8 @@ struct ScoutApp: App {
     private static let refreshID = "com.ralphgeb.scout.refresh"
 
     init() {
+        // listens for App Store transactions (Scout Plus) from launch
+        _ = PlusStore.shared
         // iOS wakes the app in the background now and then; each time Scout checks for a new
         // briefing, posts the morning notification if one's arrived, and refreshes the widget.
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshID, using: nil) { task in

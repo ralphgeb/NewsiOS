@@ -276,7 +276,6 @@ final class NewsStore: ObservableObject {
         let pool = stories
             .filter { $0.newsSection == topic && $0.published >= since }
             .sorted { storyScore($0) > storyScore($1) }
-        let name = topic.rawValue.lowercased()
 
         if topic == .tech {
             let eds = latestEditions()
@@ -286,7 +285,7 @@ final class NewsStore: ObservableObject {
                 }
                 let cover = items.first { $0.story?.imageURL != nil }?.story ?? items.first?.story
                 return FrontPage(
-                    label: "\(ed.edition) tech briefing", generated: ed.generated, title: ed.title,
+                    label: "Top stories", generated: ed.generated, title: ed.title,
                     intro: Self.paragraphs(ed.intro), cover: cover, items: items,
                     rumours: ed.rumourWatch.compactMap { r in story(r.storyId).map { FrontPage.RumourItem(story: $0, note: r.note) } },
                     movers: ed.stocksToWatch, moversTitle: topic.moversTitle,
@@ -303,9 +302,8 @@ final class NewsStore: ObservableObject {
             }
             let cover = story(b.leadStoryId) ?? pool.first { $0.imageURL != nil }
             let used = Set([cover?.id].compactMap { $0} + b.points.compactMap(\.storyId))
-            let hour = cal.component(.hour, from: g)
             return FrontPage(
-                label: "\(hour < 12 ? "Morning" : "Evening") \(name) briefing", generated: g, title: b.title,
+                label: "Top stories", generated: g, title: b.title,
                 intro: Self.paragraphs(b.summary), cover: cover, items: points, rumours: [],
                 movers: b.movers, moversTitle: topic.moversTitle, brief: [],
                 more: Array(pool.filter { !used.contains($0.id) }.prefix(6)),
@@ -317,7 +315,7 @@ final class NewsStore: ObservableObject {
         let cover = pool.first { $0.imageURL != nil } ?? pool[0]
         let rest = pool.filter { $0.id != cover.id }
         return FrontPage(
-            label: "Biggest \(name) stories",
+            label: "Top stories",
             generated: nil, title: cover.title, intro: Self.paragraphs(cover.summary), cover: cover,
             items: rest.prefix(5).map { FrontPage.Item(id: $0.id, story: $0, title: $0.title, text: $0.summary) },
             rumours: [], movers: [], moversTitle: topic.moversTitle, brief: [],
@@ -338,7 +336,7 @@ final class NewsStore: ObservableObject {
         var seen = Set<String>()
         let movers = sections.compactMap { briefing.section($0) }.flatMap(\.movers).filter { seen.insert($0.ticker).inserted }
         return FrontPage(
-            label: "For you", generated: updated, title: cover.title, intro: [], cover: cover,
+            label: "Top stories", generated: updated, title: cover.title, intro: [], cover: cover,
             items: rest.prefix(7).map { FrontPage.Item(id: $0.id, story: $0, title: $0.title, text: reason($0)) },
             rumours: [], movers: Array(movers.prefix(6)), moversTitle: "Companies to watch", brief: [],
             more: Array(rest.dropFirst(7).prefix(6)),

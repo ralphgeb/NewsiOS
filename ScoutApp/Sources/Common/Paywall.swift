@@ -1,3 +1,4 @@
+import StoreKit
 import SwiftUI
 
 /// Scout Plus. Without it (the default) the summaries, the first stories of each list and the
@@ -6,12 +7,72 @@ import SwiftUI
 enum Plus {
     static let key = "plus.active"
     static let sinceKey = "plus.since"
+    /// "store" for a real (or sandbox) subscription, "test" for the pretend checkout.
+    static let sourceKey = "plus.source"
 
     static var isActive: Bool { UserDefaults.standard.bool(forKey: key) }
 
     /// "£1" in the UK, "$1" elsewhere.
     static var price: String {
         Locale.current.currency?.identifier == "GBP" ? "£1" : "$1"
+    }
+}
+
+/// The Scout Plus subscription through the App Store (StoreKit 2): the product, buying it with
+/// Apple's own sheet, and keeping Plus on while the subscription is active. In TestFlight the
+/// purchase happens in Apple's sandbox, so nothing is charged.
+@MainActor
+final class PlusStore: ObservableObject {
+    static let shared = PlusStore()
+    static let productID = "com.ralphgeb.scout.plus.monthly"
+
+    @Published private(set) var product: Product?
+    private var updates: Task<Void, Never>?
+
+    private init() {
+        updates = Task { [weak self] in
+            for await result in Transaction.updates {
+                if case .verified(let t) = result { await t.finish() }
+                await self?.refresh()
+            }
+        }
+        Task { await load(); await refresh() }
+    }
+
+    /// The price as the App Store shows it ("£0.99"), or ours until the product loads.
+    var price: String { product?.displayPrice ?? Plus.price }
+
+    func load() async {
+        product = try? await Product.products(for: [Self.productID]).first
+    }
+
+    /// Plus is on while an App Store subscription is active; a test purchase stays as it is.
+    func refresh() async {
+        var active = false
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let t) = result, t.productID == Self.productID, t.revocationDate == nil { active = true }
+        }
+        let d = UserDefaults.standard
+        if active {
+            if !d.bool(forKey: Plus.key) { d.set(Date.now.timeIntervalSince1970, forKey: Plus.sinceKey) }
+            d.set(true, forKey: Plus.key)
+            d.set("store", forKey: Plus.sourceKey)
+        } else if d.string(forKey: Plus.sourceKey) == "store" {
+            d.set(false, forKey: Plus.key)
+        }
+    }
+
+    /// Apple's payment sheet (double-click to pay). True once the subscription is active.
+    func purchase() async -> Bool {
+        if product == nil { await load() }
+        guard let product else { return false }
+        guard let result = try? await product.purchase() else { return false }
+        if case .success(let verification) = result, case .verified(let t) = verification {
+            await t.finish()
+            await refresh()
+            return true
+        }
+        return false
     }
 }
 
@@ -72,59 +133,63 @@ struct PlusSheet: View {
     @AppStorage(Plus.key) private var hasPlus = false
     @AppStorage(Plus.sinceKey) private var since = 0.0
     @State private var step = Step.offer
+    @ObservedObject private var plus = PlusStore.shared
 
     enum Step { case offer, confirm, paying, done }
 
     var body: some View {
-        VStack(spacing: 20) {
-            ScoutLogo().frame(width: 84, height: 84).padding(.top, 24)
+        VStack(spacing: 14) {
+            ScoutLogo().frame(width: 56, height: 56).padding(.top, 22)
             if step == .done {
                 welcome.transition(.opacity.combined(with: .scale(scale: 0.96)))
             } else {
                 offer.transition(.opacity)
             }
         }
-        .padding(.horizontal, 28)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.background.ignoresSafeArea())
-        .presentationDetents([.large])
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
         .animation(.smooth(duration: 0.35), value: step)
         .sensoryFeedback(.success, trigger: step == .done)
         .interactiveDismissDisabled(step == .paying)
     }
 
     private var offer: some View {
-        VStack(spacing: 20) {
-            VStack(spacing: 6) {
-                Text("Scout Plus").font(.system(size: 26, weight: .semibold)).tracking(-0.3).foregroundStyle(Theme.text)
+        VStack(spacing: 14) {
+            VStack(spacing: 4) {
+                Text("Scout Plus").font(.system(size: 22, weight: .semibold)).tracking(-0.3).foregroundStyle(Theme.text)
                 Text(reason ?? "Every story, every briefing, every region.")
-                    .font(.system(size: 15)).foregroundStyle(Theme.secondary)
+                    .font(.system(size: 14)).foregroundStyle(Theme.secondary)
                     .multilineTextAlignment(.center)
             }
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 perk("Every story in For you and every section")
                 perk("Follow any stock, with its AI summary")
-                perk("Your own colours and themes, kept")
-                perk("Every morning\u{2019}s briefing for all four sections")
+                perk("Your own colours, themes and app icons")
             }
             .padding(.horizontal, 8)
-            Spacer(minLength: 0)
-            if step == .offer {
-                VStack(spacing: 8) {
-                    Button { withAnimation(.smooth) { step = .confirm } } label: {
-                        Text("Subscribe · \(Plus.price) a month")
+            if step == .offer || (step == .paying && plus.product != nil) {
+                VStack(spacing: 6) {
+                    Button { subscribe() } label: {
+                        ZStack {
+                            if step == .paying {
+                                ProgressView().tint(Theme.background)
+                            } else {
+                                Text("Subscribe · \(plus.price) a month")
+                            }
+                        }
                             .font(.system(size: 16, weight: .semibold))
                             .frame(maxWidth: .infinity).frame(height: 52)
                             .background(Theme.ink, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .foregroundStyle(Theme.background)
                     }
                     .buttonStyle(PressStyle())
-                    Text("Cancel any time.").font(.system(size: 12)).foregroundStyle(Theme.tertiary)
-                    Button("Not now") { dismiss() }
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Theme.secondary)
-                        .frame(height: 36)
+                    .disabled(step == .paying)
+                    Text(plus.product == nil ? "Cancel any time. Test purchase: nothing is charged." : "Cancel any time in Settings. Renews monthly.")
+                        .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                 }
                 .transition(.opacity)
             } else {
@@ -142,7 +207,7 @@ struct PlusSheet: View {
                     Text("Monthly · renews automatically").font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 }
                 Spacer()
-                Text("\(Plus.price)/mo").font(Theme.number(17, weight: .semibold)).foregroundStyle(Theme.text)
+                Text("\(plus.price)/mo").font(Theme.number(17, weight: .semibold)).foregroundStyle(Theme.text)
             }
             Rectangle().fill(Theme.hairline).frame(height: 0.5)
             Button {
@@ -151,6 +216,7 @@ struct PlusSheet: View {
                     try? await Task.sleep(for: .milliseconds(1400))
                     hasPlus = true
                     since = Date.now.timeIntervalSince1970
+                    UserDefaults.standard.set("test", forKey: Plus.sourceKey)
                     step = .done
                     try? await Task.sleep(for: .milliseconds(1800))
                     dismiss()
@@ -194,11 +260,29 @@ struct PlusSheet: View {
         .padding(.top, 20)
     }
 
+    /// Apple's own payment sheet when the App Store has the product; the test checkout otherwise.
+    private func subscribe() {
+        guard plus.product != nil else {
+            withAnimation(.smooth) { step = .confirm }
+            return
+        }
+        step = .paying
+        Task {
+            if await plus.purchase() {
+                step = .done
+                try? await Task.sleep(for: .milliseconds(1800))
+                dismiss()
+            } else {
+                withAnimation(.smooth) { step = .offer }
+            }
+        }
+    }
+
     private func perk(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.accent)
                 .frame(width: 18).padding(.top, 2)
-            Text(text).font(.system(size: 15)).foregroundStyle(Theme.text)
+            Text(text).font(.system(size: 14)).foregroundStyle(Theme.text)
             Spacer(minLength: 0)
         }
     }

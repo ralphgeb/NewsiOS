@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import StoreKit
 import WeatherKit
 
 /// Publishes appearance changes so the whole app redraws in the new colors.
@@ -15,7 +16,7 @@ final class AppearanceStore: ObservableObject {
     /// True while a look is being tried without Scout Plus.
     @Published private(set) var previewing = false
     private var previewEnds: Task<Void, Never>?
-    static let previewSeconds = 60
+    static let previewSeconds = 10   // short while testing; 60 for release
 
     init() { appearance = Appearance.current }
 
@@ -87,8 +88,10 @@ struct SettingsView: View {
     @State private var weatherSources: URL?
     @AppStorage(Plus.key) private var hasPlus = false
     @AppStorage(Plus.sinceKey) private var since = 0.0
+    @AppStorage(Plus.sourceKey) private var plusSource = ""
     @State private var showPlus = false
     @State private var previewNote = false
+    @State private var currentIcon: String?
 
     var body: some View {
         NavigationStack {
@@ -97,6 +100,7 @@ struct SettingsView: View {
                 notificationsSection
                 newsSection
                 appearanceSection
+                iconSection
                 todaySection
                 Section("How Scout works") {
                     Button("Show the welcome again") {
@@ -153,10 +157,22 @@ struct SettingsView: View {
                     Spacer()
                     Text(sinceText).foregroundStyle(Theme.secondary)
                 }
-                Button("End test subscription", role: .destructive) {
-                    withAnimation(.snappy) { hasPlus = false }
+                if plusSource == "store" {
+                    Button("Manage subscription") {
+                        Task {
+                            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                                try? await AppStore.showManageSubscriptions(in: scene)
+                            }
+                        }
+                    }
+                } else {
+                    Button("End test subscription", role: .destructive) {
+                        withAnimation(.snappy) { hasPlus = false }
+                        // back to the main icon, which comes free
+                        if UIApplication.shared.alternateIconName != nil { UIApplication.shared.setAlternateIconName(nil) }
+                    }
+                    .foregroundStyle(.red)
                 }
-                .foregroundStyle(.red)
             } else {
                 Button { showPlus = true } label: {
                     HStack(spacing: 12) {
@@ -173,7 +189,11 @@ struct SettingsView: View {
                 }
             }
         } footer: {
-            if hasPlus { Text("A test subscription: nothing was charged. Ending it locks the preview again.") }
+            if hasPlus {
+                Text(plusSource == "store"
+                     ? "Through the App Store. In TestFlight it's a sandbox purchase, so nothing is charged."
+                     : "A test subscription: nothing was charged. Ending it locks Plus again.")
+            }
         }
         .listRowBackground(Theme.card)
     }
@@ -303,7 +323,7 @@ struct SettingsView: View {
         } footer: {
             Text(hasPlus
                  ? "Pick a look, or make your own under Custom colors; Reset goes back to Scout's own. The typeface is for headlines and numbers. The widgets follow too."
-                 : "Try any look for a minute; Scout Plus keeps it and adds your own colours. Light, Dark and Automatic, and the typeface, are always yours to choose.")
+                 : "Try any look for a few seconds; Scout Plus keeps it and adds your own colours. Light, Dark and Automatic, and the typeface, are always yours to choose.")
         }
         .listRowBackground(Theme.card)
     }
@@ -318,6 +338,57 @@ struct SettingsView: View {
             }
         }
         .accessibilityHidden(true)
+    }
+
+    // MARK: App icon
+
+    /// The Home Screen icon in each look's colours: Scout Plus.
+    private var iconSection: some View {
+        Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(AppIcons.all, id: \.name) { icon in
+                        let on = currentIcon == icon.alternate
+                        Button {
+                            guard hasPlus else { showPlus = true; return }
+                            UIApplication.shared.setAlternateIconName(icon.alternate) { _ in
+                                currentIcon = UIApplication.shared.alternateIconName
+                            }
+                        } label: {
+                            VStack(spacing: 6) {
+                                Image(icon.preview)
+                                    .resizable()
+                                    .frame(width: 60, height: 60)
+                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(on ? Theme.accent : Theme.hairline, lineWidth: on ? 2.5 : 1)
+                                        .padding(-3))
+                                    .overlay(alignment: .bottomTrailing) {
+                                        if !hasPlus && icon.alternate != nil {
+                                            Image(systemName: "lock.fill")
+                                                .font(.system(size: 10, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .padding(5)
+                                                .background(.black.opacity(0.45), in: Circle())
+                                                .offset(x: 4, y: 4)
+                                        }
+                                    }
+                                Text(icon.name).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.secondary)
+                            }
+                        }
+                        .buttonStyle(PressStyle())
+                    }
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 4)
+            }
+        } header: {
+            Text("App icon")
+        } footer: {
+            Text(hasPlus ? "Your Home Screen icon, in the colours of each look." : "Icons in the colours of each look come with Scout Plus.")
+        }
+        .listRowBackground(Theme.card)
+        .onAppear { currentIcon = UIApplication.shared.alternateIconName }
     }
 
     // MARK: Today, reading, notifications
@@ -541,7 +612,7 @@ private struct PreviewNote: View {
         HStack(spacing: 12) {
             Image(systemName: "paintpalette.fill").font(.system(size: 16)).foregroundStyle(Theme.accent)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Previewing for 1 minute").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+                Text("Previewing for \(AppearanceStore.previewSeconds) seconds").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
                 Text("Get Scout Plus to keep it and customise every colour.")
                     .font(.system(size: 12)).foregroundStyle(Theme.secondary)
             }
@@ -556,4 +627,11 @@ private struct PreviewNote: View {
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.15), radius: 16, y: 6)
     }
+}
+
+/// Scout's icon in each look's colours. nil is the main icon.
+enum AppIcons {
+    struct Icon { let name: String; let alternate: String?; var preview: String { "IconPreview-\(name)" } }
+    static let all: [Icon] = [Icon(name: "Scout", alternate: nil)] +
+        ["Graphite", "Ocean", "Forest", "Mono", "Dusk", "Sand"].map { Icon(name: $0, alternate: "AppIcon-\($0)") }
 }
