@@ -72,8 +72,6 @@ struct NewsView: View {
         let all = store.newsItems(section)
         let items = Array(all.prefix(limits[section] ?? 40))
         let seq = items.map(\.id)
-        // the paywall preview: the first 12 stories open, the rest locked
-        let locked: Set<String> = paywall ? Set(items.dropFirst(Paywall.freeStories).map(\.id)) : []
         VStack(spacing: 14) {
             if store.stories.isEmpty {
                 if store.isLoading {
@@ -101,13 +99,13 @@ struct NewsView: View {
                     if let big = chunk.hero {
                         NavigationLink(value: StoryRoute(id: big.id, sequence: seq)) { HeroCard(story: big) }
                             .buttonStyle(PressStyle())
-                            .locked(locked.contains(big.id))
+                            .locked(paywall)
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     } else {
-                        StoryList(stories: chunk.rows, sequence: seq, locked: locked)
+                        StoryList(stories: chunk.rows, sequence: seq, locked: paywall)
                     }
                 }
-                if all.count > items.count {
+                if all.count > items.count, !paywall {
                     Button {
                         withAnimation(.snappy) { limits[section, default: 40] += 40 }
                     } label: {

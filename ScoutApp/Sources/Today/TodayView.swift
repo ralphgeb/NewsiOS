@@ -603,11 +603,12 @@ struct MoreCard: View {
     let title: String
     let stories: [Story]
     let sequence: [String]
+    @AppStorage(Paywall.key) private var paywall = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHead(title: title, detail: "\(stories.count)")
-            StoryList(stories: stories, sequence: sequence)
+            StoryList(stories: stories, sequence: sequence, locked: paywall)
         }
     }
 }

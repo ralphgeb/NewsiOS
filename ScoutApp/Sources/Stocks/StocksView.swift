@@ -10,6 +10,8 @@ struct StocksView: View {
     @State private var showSearch = false
     @State private var allNews = false
 
+    @AppStorage(Paywall.key) private var paywall = false
+
     var body: some View {
         NavigationStack {
             ScoutPage(showSettings: $showSettings, title: "Stocks", subtitle: stocks.updatedText,
@@ -27,8 +29,11 @@ struct StocksView: View {
                 if !stocks.inTheNews.isEmpty {
                     let list = stocks.inTheNews
                     SectionHead(title: "In the news", detail: "named in Scout's stories")
-                    StockList(symbols: allNews ? list : Array(list.prefix(15)), editing: false)
-                    if list.count > 15 {
+                    // under the paywall preview: folded to four, with one lock over the card
+                    StockList(symbols: paywall ? Array(list.prefix(4)) : (allNews ? list : Array(list.prefix(15))), editing: false)
+                        .locked(paywall)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    if list.count > 15, !paywall {
                         Button {
                             withAnimation(.snappy) { allNews.toggle() }
                         } label: {

@@ -1,30 +1,31 @@
 import SwiftUI
 
-/// A look at Scout with a subscription, switched on in Settings: the first 12 stories in each list
-/// are open, the rest sit under a veil in the page's own colours with a lock. Nothing is sold.
+/// A look at Scout with a subscription, switched on in Settings: the summaries stay open and the
+/// stories under them, the stocks in the news and the stock summaries are locked. Nothing is sold.
 enum Paywall {
     static let key = "preview.paywall"
-    static let freeStories = 12
 }
 
-/// The veil and the lock over a story; tapping it opens the Scout Plus page.
+/// A light veil over a whole card, so the text and pictures still show through, with one lock in
+/// the middle; tapping it opens the Scout Plus page.
 struct Locked: ViewModifier {
     let locked: Bool
     @State private var showPlus = false
 
     func body(content: Content) -> some View {
         content
+            .blur(radius: locked ? 2.2 : 0)
+            .allowsHitTesting(!locked)
             .overlay {
                 if locked {
                     ZStack {
-                        Rectangle().fill(.ultraThinMaterial)
-                        Theme.card.opacity(0.62)
+                        Theme.background.opacity(0.38)
                         LockBadge()
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { showPlus = true }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Locked story")
+                    .accessibilityLabel("Locked. Scout Plus")
                     .accessibilityAddTraits(.isButton)
                     .transition(.opacity)
                 }
@@ -37,16 +38,14 @@ extension View {
     func locked(_ locked: Bool) -> some View { modifier(Locked(locked: locked)) }
 }
 
-/// A padlock in a soft disc in the main color.
+/// Just the padlock: soft white, with a shadow so it reads on light and dark cards.
 struct LockBadge: View {
     var body: some View {
-        ZStack {
-            Circle().fill(Theme.ink).frame(width: 46, height: 46)
-                .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
-            Image(systemName: "lock.fill")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.background)
-        }
+        Image(systemName: "lock.fill")
+            .font(.system(size: 30, weight: .medium))
+            .foregroundStyle(.white.opacity(0.92))
+            .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
+            .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
     }
 }
 
@@ -63,8 +62,8 @@ struct PlusSheet: View {
                     .font(.system(size: 15)).foregroundStyle(Theme.secondary)
             }
             VStack(alignment: .leading, spacing: 12) {
-                perk("Unlimited stories in For you and every section")
-                perk("Morning and evening briefings for all four sections")
+                perk("Every story in For you and every section")
+                perk("Every morning\u{2019}s briefing for all four sections")
                 perk("AI summaries for every stock you follow")
             }
             .padding(.horizontal, 8)

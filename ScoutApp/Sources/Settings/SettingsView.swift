@@ -54,7 +54,7 @@ struct SettingsView: View {
                         // the welcome covers the app once Settings has closed
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onboarded = false }
                     }
-                    explainer("Today", "Each morning at 6:00 the ScoutAI updater reads about 150 news sites, and AI writes a briefing for Tech, Finance, World and Fashion (World and Finance cover the US, the UK, Europe and Asia). Today shows your For you front page: the main events, the key stories and what to watch. Tech also gets an evening edition. Pull Today down to refresh.")
+                    explainer("Today", "Each morning at 6:00 the ScoutAI updater reads about 150 news sites, and AI writes a briefing for Tech, Finance, World and Fashion (World and Finance cover the US, the UK, Europe and Asia). Today shows your For you front page: the main events, the key stories and what to watch. Pull Today down to refresh.")
                     explainer("For you", "Stories on your topics, ranked by importance: how big the story is (an AI score and its market impact), how many outlets cover it and how recent it is. The day's very biggest stories are mixed in, and no more than three in a row share a topic. Scout reads about 150 news sites from the UK, the US, Europe and Asia. The sections run newest first.")
                     explainer("Rumour odds", "For unconfirmed stories the AI weighs who is reporting it, how many outlets agree and what the companies say. Likely is 65% and up, a toss-up 35 to 64%. When a rumour comes true or is denied, its label changes.")
                     explainer("Stocks", "Prices for about 3,500 stocks, indices, currencies and cryptos update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Stocks you follow, America's biggest companies and the stocks in the news also get charts and key numbers; the ones you follow and the biggest get an AI summary each morning.")
@@ -65,7 +65,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Preview")
                 } footer: {
-                    Text("Shows how Scout would look with a subscription: the first 12 stories in each list stay open and the rest are locked. Nothing is sold or charged.")
+                    Text("Shows how Scout would look with a subscription: the summaries stay open, and the stories under them, More for you, the stocks in the news, stock summaries and stories on stock pages are locked. Nothing is sold or charged.")
                 }
                 .listRowBackground(Theme.card)
                 Section {

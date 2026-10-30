@@ -13,6 +13,7 @@ struct StockDetailView: View {
     @State private var reading: WebLink?
     /// Apple Intelligence's quick summary, until Scout's own arrives.
     @State private var localSummary: OnDeviceSummary.Result?
+    @AppStorage(Paywall.key) private var paywall = false
     @State private var writing = false
 
     private var symbol: String { route.ticker }
@@ -26,10 +27,13 @@ struct StockDetailView: View {
                 chartCard(q)
                 stats(q)
                 aiCard
+                    .locked(paywall)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 headlines
                 if !stories.isEmpty {
                     SectionHead(title: "In Scout", detail: "\(stories.count) stor\(stories.count == 1 ? "y" : "ies")")
-                    StoryList(stories: Array(stories.prefix(12)), sequence: stories.map(\.id))
+                    // under the paywall preview: folded to two stories with one lock
+                    StoryList(stories: Array(stories.prefix(paywall ? 2 : 12)), sequence: stories.map(\.id), locked: paywall)
                 }
                 Text("Prices update every 30 minutes on weekdays. The summary is written by AI and can be wrong. Not financial advice.")
                     .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
