@@ -10,7 +10,8 @@ struct NewsView: View {
     @State private var limits: [NewsSection: Int] = [:]
     @State private var forward = true
     @State private var showInterests = false
-    @AppStorage(Paywall.key) private var paywall = false
+    @AppStorage(Plus.key) private var hasPlus = false
+    private var paywall: Bool { !hasPlus }
 
     private var section: NewsSection { NewsSection(rawValue: sectionRaw) ?? .all }
 
@@ -95,14 +96,16 @@ struct NewsView: View {
                         .buttonStyle(PressStyle())
                 }
                 SectionHead(title: section == .all ? (store.interests.isEmpty ? "Top stories" : "For you") : "Latest", detail: "\(all.count) stories")
-                ForEach(chunks(items.filter { $0.id != hero?.id })) { chunk in
+                // without Scout Plus, the first group of stories is open and everything from the
+                // first big picture card down is locked
+                ForEach(Array(chunks(items.filter { $0.id != hero?.id }).enumerated()), id: \.element.id) { i, chunk in
                     if let big = chunk.hero {
                         NavigationLink(value: StoryRoute(id: big.id, sequence: seq)) { HeroCard(story: big) }
                             .buttonStyle(PressStyle())
-                            .locked(paywall)
+                            .locked(paywall && i > 0)
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     } else {
-                        StoryList(stories: chunk.rows, sequence: seq, locked: paywall)
+                        StoryList(stories: chunk.rows, sequence: seq, locked: paywall && i > 0)
                     }
                 }
                 if all.count > items.count, !paywall {

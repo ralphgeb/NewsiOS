@@ -68,8 +68,13 @@ final class NewsStore: ObservableObject {
 
     /// The regions World and Finance (and For you's world and market stories) come from.
     @Published var regions: Set<String> {
-        didSet { UserDefaults.standard.set(regions.sorted(), forKey: Self.regionsKey) }
+        didSet {
+            UserDefaults.standard.set(regions.sorted(), forKey: Self.regionsKey)
+            if regions.contains("US") != oldValue.contains("US") { rebuild() }
+        }
     }
+    /// The stories as the updater wrote them, before the US preference below.
+    private var rawStories: [Story] = []
     static let allRegions = ["UK", "US", "Europe", "Asia"]
     private static let regionsKey = "news.regions"
 
@@ -128,15 +133,40 @@ final class NewsStore: ObservableObject {
     }
 
     private func apply(_ file: NewsFile) {
-        stories = file.stories
+        rawStories = file.stories
         updated = file.updated
-        byId = Dictionary(file.stories.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        rebuild()
         // keep saved copies fresh with the latest analysis
         var changed = false
         for i in saved.indices {
             if let s = byId[saved[i].id], s != saved[i] { saved[i] = s; changed = true }
         }
         if changed { persistSaved() }
+    }
+
+    /// With US news on, a story Al Jazeera led is shown from another outlet when one covered it too.
+    private func rebuild() {
+        let preferOthers = regions.contains("US")
+        stories = rawStories.map { s in
+            guard preferOthers, var list = s.sources, list.count > 1, Self.isDemoted(list[0].name) else { return s }
+            let first = list.removeFirst()
+            if let i = list.firstIndex(where: { !Self.isDemoted($0.name) }) {
+                let lead = list.remove(at: i)
+                var out = s
+                out.sources = [lead] + list + [first]
+                return out
+            }
+            return s
+        }
+        byId = Dictionary(stories.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Outlets that rank lower when you follow US news.
+    static func isDemoted(_ outlet: String?) -> Bool { (outlet ?? "").localizedCaseInsensitiveContains("al jazeera") }
+
+    /// How much a story's lead outlet lowers it (Al Jazeera, with US news on).
+    private func outletPenalty(_ s: Story) -> Double {
+        regions.contains("US") && Self.isDemoted(s.lead?.name) ? 2.5 : 0
     }
 
     func story(_ id: String?) -> Story? {
@@ -157,7 +187,7 @@ final class NewsStore: ObservableObject {
         let imp = s.importance ?? Double(s.impactLevel * 2 + 3)
         let hours = max(0, now.timeIntervalSince(s.published) / 3600)
         let liked: Double = (!interests.isEmpty && (s.topics ?? []).contains(where: { interests.contains($0) })) ? 1.5 : 0
-        let base = imp * 1.6 + log2(Double(s.outletCount)) * 3 + Double(s.impactLevel) + (s.isRumour ? 0.5 : 0) + liked
+        let base = imp * 1.6 + log2(Double(s.outletCount)) * 3 + Double(s.impactLevel) + (s.isRumour ? 0.5 : 0) + liked - outletPenalty(s)
         return base * pow(0.5, hours / 30)   // loses half its weight every 30 hours
     }
 
@@ -168,7 +198,9 @@ final class NewsStore: ObservableObject {
         let now = Date.now
         let fresh = stories.filter { ($0.published == .distantPast || now.timeIntervalSince($0.published) <= Self.maxAge) && inRegions($0) }
         if let topic = section.topic {
-            return fresh.filter { $0.newsSection == topic }.sorted { $0.published > $1.published }
+            // newest first; with US news on, Al Jazeera-only stories count as six hours older
+            let key = { (s: Story) in s.published.addingTimeInterval(self.outletPenalty(s) > 0 ? -6 * 3600 : 0) }
+            return fresh.filter { $0.newsSection == topic }.sorted { key($0) > key($1) }
         }
         return forYou(fresh, now: now)
     }

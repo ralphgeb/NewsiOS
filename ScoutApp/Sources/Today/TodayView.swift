@@ -603,7 +603,8 @@ struct MoreCard: View {
     let title: String
     let stories: [Story]
     let sequence: [String]
-    @AppStorage(Paywall.key) private var paywall = false
+    @AppStorage(Plus.key) private var hasPlus = false
+    private var paywall: Bool { !hasPlus }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {

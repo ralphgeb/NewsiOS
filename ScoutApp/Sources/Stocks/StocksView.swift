@@ -9,8 +9,10 @@ struct StocksView: View {
     @State private var editing = false
     @State private var showSearch = false
     @State private var allNews = false
+    @State private var showPlus = false
 
-    @AppStorage(Paywall.key) private var paywall = false
+    @AppStorage(Plus.key) private var hasPlus = false
+    private var paywall: Bool { !hasPlus }
 
     var body: some View {
         NavigationStack {
@@ -29,11 +31,8 @@ struct StocksView: View {
                 if !stocks.inTheNews.isEmpty {
                     let list = stocks.inTheNews
                     SectionHead(title: "In the news", detail: "named in Scout's stories")
-                    // under the paywall preview: folded to four, with one lock over the card
-                    StockList(symbols: paywall ? Array(list.prefix(4)) : (allNews ? list : Array(list.prefix(15))), editing: false)
-                        .locked(paywall)
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    if list.count > 15, !paywall {
+                    StockList(symbols: allNews ? list : Array(list.prefix(15)), editing: false)
+                    if list.count > 15 {
                         Button {
                             withAnimation(.snappy) { allNews.toggle() }
                         } label: {
@@ -59,6 +58,7 @@ struct StocksView: View {
             .task { await stocks.keepFresh() }
             .task { await stocks.keepRequestsAlive() }
             .sheet(isPresented: $showSearch) { StockSearchView().environmentObject(stocks) }
+            .sheet(isPresented: $showPlus) { PlusSheet(reason: "Following your own stocks is part of Scout Plus.") }
             .onChange(of: stocks.mine.isEmpty) { _, empty in if empty { editing = false } }
         }
     }
@@ -66,7 +66,7 @@ struct StocksView: View {
     private func refreshAll() async { await stocks.refreshFile() }
 
     private var addPrompt: some View {
-        Button { showSearch = true } label: {
+        Button { if paywall { showPlus = true } else { showSearch = true } } label: {
             HStack(spacing: 14) {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .bold))
@@ -86,7 +86,7 @@ struct StocksView: View {
     }
 
     private var addButton: some View {
-        Button { showSearch = true } label: {
+        Button { if paywall { showPlus = true } else { showSearch = true } } label: {
             Label("Add a stock", systemImage: "plus")
                 .font(.system(size: 15, weight: .semibold))
                 .frame(maxWidth: .infinity).frame(height: 46)

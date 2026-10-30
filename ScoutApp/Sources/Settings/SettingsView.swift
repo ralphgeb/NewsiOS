@@ -5,15 +5,61 @@ import WeatherKit
 /// Publishes appearance changes so the whole app redraws in the new colors.
 @MainActor
 final class AppearanceStore: ObservableObject {
-    @Published var appearance: Appearance { didSet { Appearance.save(appearance) } }
+    @Published var appearance: Appearance {
+        didSet {
+            // a preview isn't saved, so it can't outlive the minute
+            if previewing { Appearance.current = appearance } else { Appearance.save(appearance) }
+            Self.applyStyle(appearance.mode)
+        }
+    }
+    /// True while a look is being tried without Scout Plus.
+    @Published private(set) var previewing = false
+    private var previewEnds: Task<Void, Never>?
+    static let previewSeconds = 60
 
     init() { appearance = Appearance.current }
 
+    /// A look from the row of presets. Without Scout Plus it's a preview: after a minute the
+    /// colors fade back to Scout's own.
     func apply(_ preset: Preset) {
         var a = Appearance(preset: preset, numberStyle: appearance.numberStyle)
         a.sameInBoth = appearance.sameInBoth
         a.mode = appearance.mode
+        if Plus.isActive {
+            previewing = false
+            appearance = a
+            return
+        }
+        previewing = true
         appearance = a
+        previewEnds?.cancel()
+        previewEnds = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.previewSeconds))
+            guard !Task.isCancelled else { return }
+            self?.endPreview()
+        }
+    }
+
+    /// Back to the saved look, gently.
+    func endPreview() {
+        guard previewing else { return }
+        previewEnds?.cancel()
+        var a = Appearance.load()
+        a.mode = appearance.mode
+        a.numberStyle = appearance.numberStyle
+        withAnimation(.easeInOut(duration: 1.2)) {
+            previewing = false
+            appearance = a
+        }
+    }
+
+    /// Light, dark or Automatic, set on the window itself: SwiftUI's preferredColorScheme
+    /// doesn't let go of Light or Dark when you go back to Automatic.
+    static func applyStyle(_ mode: AppearanceMode) {
+        let style: UIUserInterfaceStyle = mode == .light ? .light : mode == .dark ? .dark : .unspecified
+        for scene in UIApplication.shared.connectedScenes {
+            for window in (scene as? UIWindowScene)?.windows ?? [] { window.overrideUserInterfaceStyle = style }
+        }
     }
 
     /// Back to the original colors and type; light or dark stays as you set it.
@@ -39,11 +85,15 @@ struct SettingsView: View {
     @AppStorage(Notifier.enabledKey) private var notify = false
     @State private var notifyNote: String?
     @State private var weatherSources: URL?
-    @AppStorage(Paywall.key) private var paywall = false
+    @AppStorage(Plus.key) private var hasPlus = false
+    @AppStorage(Plus.sinceKey) private var since = 0.0
+    @State private var showPlus = false
+    @State private var previewNote = false
 
     var body: some View {
         NavigationStack {
             Form {
+                plusSection
                 notificationsSection
                 newsSection
                 appearanceSection
@@ -61,14 +111,6 @@ struct SettingsView: View {
                     explainer("Market impact", "Which companies a story could move, up or down, and by how much: one dot is low, three is high. Tap a company for every story that names it.")
                 }
                 Section {
-                    Toggle("Paywall preview", isOn: $paywall)
-                } header: {
-                    Text("Preview")
-                } footer: {
-                    Text("Shows how Scout would look with a subscription: the summaries stay open, and the stories under them, More for you, the stocks in the news, stock summaries and stories on stock pages are locked. Nothing is sold or charged.")
-                }
-                .listRowBackground(Theme.card)
-                Section {
                 } footer: {
                     Text("Summaries, odds and market effects are written by AI in its own words and can be wrong. Not financial advice. Every story links to the original.")
                 }
@@ -85,6 +127,59 @@ struct SettingsView: View {
         }
         // switches show "on" in the accent, here and on the pages inside Settings
         .toggleStyle(SwitchToggleStyle(tint: Theme.accent))
+        .sheet(isPresented: $showPlus) { PlusSheet(reason: "Keep your look, and make your own colours, with Scout Plus.") }
+        .overlay(alignment: .top) {
+            if previewNote {
+                PreviewNote { showPlus = true; previewNote = false }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task {
+                        try? await Task.sleep(for: .seconds(5))
+                        withAnimation(.snappy) { previewNote = false }
+                    }
+            }
+        }
+    }
+
+    // MARK: Scout Plus
+
+    private var plusSection: some View {
+        Section {
+            if hasPlus {
+                HStack {
+                    Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.accent)
+                    Text("Scout Plus")
+                    Spacer()
+                    Text(sinceText).foregroundStyle(Theme.secondary)
+                }
+                Button("End test subscription", role: .destructive) {
+                    withAnimation(.snappy) { hasPlus = false }
+                }
+                .foregroundStyle(.red)
+            } else {
+                Button { showPlus = true } label: {
+                    HStack(spacing: 12) {
+                        ScoutLogo().frame(width: 34, height: 34)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Get Scout Plus").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                            Text("Every story, your stocks and your colours · \(Plus.price) a month")
+                                .font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.tertiary)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        } footer: {
+            if hasPlus { Text("A test subscription: nothing was charged. Ending it locks the preview again.") }
+        }
+        .listRowBackground(Theme.card)
+    }
+
+    private var sinceText: String {
+        since > 0 ? "Since \(Date(timeIntervalSince1970: since).formatted(.dateTime.day().month(.abbreviated)))" : "Active"
     }
 
     // MARK: News
@@ -137,7 +232,10 @@ struct SettingsView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
                     ForEach(Preset.all) { p in
-                        Button { withAnimation(.snappy) { look.apply(p) } } label: {
+                        Button {
+                            withAnimation(.snappy) { look.apply(p) }
+                            if !hasPlus { withAnimation(.snappy) { previewNote = true } }
+                        } label: {
                             VStack(spacing: 6) {
                                 ZStack {
                                     Circle().fill((scheme == .dark ? p.dark : p.light).background.color)
@@ -178,13 +276,23 @@ struct SettingsView: View {
             }
             .padding(.vertical, 4)
 
-            NavigationLink {
-                CustomColorsView()
-            } label: {
-                HStack {
-                    Text("Custom colors")
-                    Spacer()
-                    swatches
+            if hasPlus {
+                NavigationLink {
+                    CustomColorsView()
+                } label: {
+                    HStack {
+                        Text("Custom colors")
+                        Spacer()
+                        swatches
+                    }
+                }
+            } else {
+                Button { showPlus = true } label: {
+                    HStack {
+                        Text("Custom colors").foregroundStyle(Theme.text)
+                        Spacer()
+                        Image(systemName: "lock.fill").font(.system(size: 13)).foregroundStyle(Theme.tertiary)
+                    }
                 }
             }
 
@@ -193,7 +301,9 @@ struct SettingsView: View {
         } header: {
             Text("Appearance")
         } footer: {
-            Text("Pick a look, or make your own under Custom colors; Reset goes back to Scout's own. The typeface is for headlines and numbers. The widgets follow too.")
+            Text(hasPlus
+                 ? "Pick a look, or make your own under Custom colors; Reset goes back to Scout's own. The typeface is for headlines and numbers. The widgets follow too."
+                 : "Try any look for a minute; Scout Plus keeps it and adds your own colours. Light, Dark and Automatic, and the typeface, are always yours to choose.")
         }
         .listRowBackground(Theme.card)
     }
@@ -420,5 +530,30 @@ struct CustomColorsView: View {
                 look.appearance.accent = RGBA(new)
             }
         )
+    }
+}
+
+/// The note at the top of Settings when a look is tried without Scout Plus.
+private struct PreviewNote: View {
+    let getPlus: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "paintpalette.fill").font(.system(size: 16)).foregroundStyle(Theme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Previewing for 1 minute").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+                Text("Get Scout Plus to keep it and customise every colour.")
+                    .font(.system(size: 12)).foregroundStyle(Theme.secondary)
+            }
+            Spacer(minLength: 4)
+            Button("Get Plus", action: getPlus)
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 12).frame(height: 30)
+                .background(Theme.ink, in: Capsule())
+                .foregroundStyle(Theme.background)
+        }
+        .padding(14)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: .black.opacity(0.15), radius: 16, y: 6)
     }
 }

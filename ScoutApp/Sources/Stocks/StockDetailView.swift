@@ -13,7 +13,9 @@ struct StockDetailView: View {
     @State private var reading: WebLink?
     /// Apple Intelligence's quick summary, until Scout's own arrives.
     @State private var localSummary: OnDeviceSummary.Result?
-    @AppStorage(Paywall.key) private var paywall = false
+    @AppStorage(Plus.key) private var hasPlus = false
+    private var paywall: Bool { !hasPlus }
+    @State private var showPlus = false
     @State private var writing = false
 
     private var symbol: String { route.ticker }
@@ -47,9 +49,12 @@ struct StockDetailView: View {
         .navigationTitle(symbol)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+        .sheet(isPresented: $showPlus) { PlusSheet(reason: "Following your own stocks is part of Scout Plus.") }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    // following a new stock is part of Scout Plus; unfollowing is always free
+                    if paywall && !stocks.follows(symbol) { showPlus = true; return }
                     withAnimation(.snappy) { stocks.toggle(symbol, name: route.name ?? q?.displayName) }
                 } label: {
                     Label(stocks.follows(symbol) ? "Following" : "Follow",

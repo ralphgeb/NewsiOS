@@ -47,11 +47,11 @@ struct ScoutApp: App {
                 .environmentObject(weather)
                 .environmentObject(tube)
                 .environmentObject(stocks)
-                .preferredColorScheme(look.appearance.mode.colorScheme)
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
+                AppearanceStore.applyStyle(look.appearance.mode)
                 Task {
                     await store.refreshIfStale()
                     // you've seen this one in the app, so it won't notify later
@@ -133,7 +133,6 @@ struct RootView: View {
                 .environmentObject(look)
                 .environmentObject(weather)
                 .environmentObject(tube)
-                .preferredColorScheme(look.appearance.mode.colorScheme)
         }
         .onOpenURL { url in
             // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://history.
