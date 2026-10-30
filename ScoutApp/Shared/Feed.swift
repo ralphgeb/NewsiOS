@@ -5,6 +5,10 @@ import WidgetKit
 enum Shared {
     static let appGroup = "group.com.ralphgeb.scout"     // must match project.yml
     static let widgetKind = "ScoutBriefing"
+    static let headlinesKind = "ScoutHeadlines"
+    /// Your topics and regions, copied here so the Headlines widget can follow them.
+    static let interestsKey = "news.interests"
+    static let regionsKey = "news.regions"
 
     static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
 

@@ -63,13 +63,18 @@ final class NewsStore: ObservableObject {
     }
 
     @Published var interests: Set<String> {
-        didSet { UserDefaults.standard.set(interests.sorted(), forKey: Self.interestsKey) }
+        didSet {
+            UserDefaults.standard.set(interests.sorted(), forKey: Self.interestsKey)
+            Shared.defaults.set(interests.sorted(), forKey: Shared.interestsKey)   // for the Headlines widget
+            WidgetCenter.shared.reloadTimelines(ofKind: Shared.headlinesKind)
+        }
     }
 
     /// The regions World and Finance (and For you's world and market stories) come from.
     @Published var regions: Set<String> {
         didSet {
             UserDefaults.standard.set(regions.sorted(), forKey: Self.regionsKey)
+            Shared.defaults.set(regions.sorted(), forKey: Shared.regionsKey)
             if regions.contains("US") != oldValue.contains("US") { rebuild() }
         }
     }
@@ -86,6 +91,8 @@ final class NewsStore: ObservableObject {
         topic = Shared.topic
         interests = Set(UserDefaults.standard.stringArray(forKey: Self.interestsKey) ?? [])
         regions = Set(UserDefaults.standard.stringArray(forKey: Self.regionsKey) ?? Self.allRegions)
+        Shared.defaults.set(interests.sorted(), forKey: Shared.interestsKey)
+        Shared.defaults.set(regions.sorted(), forKey: Shared.regionsKey)
         saved = Self.loadSaved()
         history = Self.loadHistory()
         loadCache()

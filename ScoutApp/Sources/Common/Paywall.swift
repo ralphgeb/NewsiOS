@@ -146,9 +146,11 @@ struct PlusSheet: View {
 
     enum Step { case offer, confirm, paying, done }
 
+    /// The sheet is as tall as what's in it, measured as it draws.
+    @State private var height: CGFloat = 430
+
     var body: some View {
         VStack(spacing: 14) {
-            Spacer(minLength: 0)
             ScoutLogo(animated: false).frame(width: 56, height: 56)
             if step == .done {
                 welcome.transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -157,10 +159,15 @@ struct PlusSheet: View {
             }
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(.top, 30)
+        .padding(.bottom, 18)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { g in Color.clear.preference(key: SheetHeightKey.self, value: g.size.height) })
+        .onPreferenceChange(SheetHeightKey.self) { h in if h > 0 { height = h } }
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(Theme.background.ignoresSafeArea())
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.height(height)])
         .presentationDragIndicator(.visible)
         .animation(.smooth(duration: 0.35), value: step)
         .sensoryFeedback(.success, trigger: step == .done)
@@ -182,7 +189,7 @@ struct PlusSheet: View {
             }
             .padding(.horizontal, 8)
             if step == .offer || (step == .paying && plus.product != nil) {
-                VStack(spacing: 6) {
+                VStack(spacing: 8) {
                     Button { subscribe() } label: {
                         ZStack {
                             if step == .paying {
@@ -201,6 +208,7 @@ struct PlusSheet: View {
                     Text(plus.product == nil ? "Cancel any time. Test purchase: nothing is charged." : "Cancel any time in Settings. Renews monthly.")
                         .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                 }
+                .padding(.top, 14)   // a little air between the perks and the button
                 .transition(.opacity)
             } else {
                 confirm.transition(.move(edge: .bottom).combined(with: .opacity))
@@ -265,9 +273,8 @@ struct PlusSheet: View {
                 .symbolEffect(.bounce, value: step == .done)
             Text("Welcome to Scout Plus").font(.system(size: 24, weight: .semibold)).tracking(-0.3).foregroundStyle(Theme.text)
             Text("Everything is unlocked.").font(.system(size: 15)).foregroundStyle(Theme.secondary)
-            Spacer(minLength: 0)
         }
-        .padding(.top, 20)
+        .padding(.vertical, 20)
     }
 
     /// Apple's own payment sheet when the App Store has the product; the test checkout otherwise.
@@ -296,4 +303,9 @@ struct PlusSheet: View {
             Spacer(minLength: 0)
         }
     }
+}
+
+private struct SheetHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

@@ -5,6 +5,7 @@ import WidgetKit
 struct ScoutWidgets: WidgetBundle {
     var body: some Widget {
         BriefingWidget()
+        HeadlinesWidget()
     }
 }
 

@@ -27,12 +27,16 @@ final class AppearanceStore: ObservableObject {
         a.sameInBoth = appearance.sameInBoth
         a.mode = appearance.mode
         if Plus.isActive {
-            previewing = false
-            appearance = a
+            Self.crossfade {
+                previewing = false
+                appearance = a
+            }
             return
         }
-        previewing = true
-        appearance = a
+        Self.crossfade {
+            previewing = true
+            appearance = a
+        }
         previewEnds?.cancel()
         previewEnds = Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.previewSeconds))
@@ -48,9 +52,32 @@ final class AppearanceStore: ObservableObject {
         var a = Appearance.load()
         a.mode = appearance.mode
         a.numberStyle = appearance.numberStyle
-        withAnimation(.easeInOut(duration: 1.2)) {
+        Self.crossfade(duration: 1.2) {
             previewing = false
             appearance = a
+        }
+    }
+
+    /// Changes the look under a picture of the screen as it is, then fades the picture away, so
+    /// one look melts into the next (instead of both fading out over black and back in).
+    static func crossfade(duration: Double = 0.8, _ change: () -> Void) {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .filter { !$0.isHidden }
+        let shots: [UIView] = windows.compactMap { w in
+            guard let shot = w.snapshotView(afterScreenUpdates: false) else { return nil }
+            shot.frame = w.bounds
+            w.addSubview(shot)
+            return shot
+        }
+        var quiet = Transaction()
+        quiet.disablesAnimations = true
+        withTransaction(quiet) { change() }
+        UIView.animate(withDuration: duration, delay: 0.08, options: [.curveEaseInOut, .allowUserInteraction]) {
+            shots.forEach { $0.alpha = 0 }
+        } completion: { _ in
+            shots.forEach { $0.removeFromSuperview() }
         }
     }
 
@@ -67,7 +94,11 @@ final class AppearanceStore: ObservableObject {
     func reset() {
         var a = Appearance.standard
         a.mode = appearance.mode
-        appearance = a
+        previewEnds?.cancel()
+        Self.crossfade {
+            previewing = false
+            appearance = a
+        }
     }
 }
 
@@ -102,17 +133,12 @@ struct SettingsView: View {
                 appearanceSection
                 iconSection
                 todaySection
-                Section("How Scout works") {
+                Section("About") {
                     Button("Show the welcome again") {
                         dismiss()
                         // the welcome covers the app once Settings has closed
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onboarded = false }
                     }
-                    explainer("Today", "Each morning at 6:00 the ScoutAI updater reads about 150 news sites, and AI writes a briefing for Tech, Finance, World and Fashion (World and Finance cover the US, the UK, Europe and Asia). Today shows your For you front page: the main events, the key stories and what to watch. Pull Today down to refresh.")
-                    explainer("For you", "Stories on your topics, ranked by importance: how big the story is (an AI score and its market impact), how many outlets cover it and how recent it is. The day's very biggest stories are mixed in, and no more than three in a row share a topic. Scout reads about 150 news sites from the UK, the US, Europe and Asia. The sections run newest first.")
-                    explainer("Rumour odds", "For unconfirmed stories the AI weighs who is reporting it, how many outlets agree and what the companies say. Likely is 65% and up, a toss-up 35 to 64%. When a rumour comes true or is denied, its label changes.")
-                    explainer("Stocks", "Prices for about 3,500 stocks, indices, currencies and cryptos update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Stocks you follow, America's biggest companies and the stocks in the news also get charts and key numbers; the ones you follow and the biggest get an AI summary each morning.")
-                    explainer("Market impact", "Which companies a story could move, up or down, and by how much: one dot is low, three is high. Tap a company for every story that names it.")
                 }
                 Section {
                 } footer: {
@@ -194,8 +220,8 @@ struct SettingsView: View {
         } footer: {
             if hasPlus {
                 Text(plusSource == "store"
-                     ? "Through the App Store. In TestFlight it's a sandbox purchase, so nothing is charged."
-                     : "A test subscription: nothing was charged. Ending it locks Plus again.")
+                     ? "Through the App Store."
+                     : "Test subscription: nothing was charged.")
             }
         }
         .listRowBackground(Theme.card)
@@ -238,8 +264,6 @@ struct SettingsView: View {
             row("Stories", store.stories.count.formatted())
         } header: {
             Text("News")
-        } footer: {
-            Text("For you on Today and in News follows your topics; Regions sets where World and Finance stories come from. The widget shows the briefing you pick here. News and the briefings are written at 6:00 each morning, London time; Scout fetches them whenever you open it.")
         }
         .listRowBackground(Theme.card)
     }
@@ -256,7 +280,7 @@ struct SettingsView: View {
                 HStack(spacing: 14) {
                     ForEach(Preset.all) { p in
                         Button {
-                            withAnimation(.snappy) { look.apply(p) }
+                            look.apply(p)
                             if !hasPlus { withAnimation(.snappy) { previewNote = true } }
                         } label: {
                             VStack(spacing: 6) {
@@ -319,14 +343,12 @@ struct SettingsView: View {
                 }
             }
 
-            Button("Reset to original colors", role: .destructive) { withAnimation { look.reset() } }
+            Button("Reset to original colors", role: .destructive) { look.reset() }
                 .foregroundStyle(.red)
         } header: {
             Text("Appearance")
         } footer: {
-            Text(hasPlus
-                 ? "Pick a look, or make your own under Custom colors; Reset goes back to Scout's own. The typeface is for headlines and numbers. The widgets follow too."
-                 : "Try any look for a few seconds; Scout Plus keeps it and adds your own colours. Light, Dark and Automatic, and the typeface, are always yours to choose.")
+            if !hasPlus { Text("Try any look for \(AppearanceStore.previewSeconds) seconds; Scout Plus keeps it.") }
         }
         .listRowBackground(Theme.card)
     }
@@ -387,8 +409,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("App icon")
-        } footer: {
-            Text(hasPlus ? "Your Home Screen icon, in the colours of each look." : "Icons in the colours of each look come with Scout Plus.")
         }
         .listRowBackground(Theme.card)
         .onAppear { currentIcon = UIApplication.shared.alternateIconName }
@@ -424,8 +444,6 @@ struct SettingsView: View {
             .task { weatherSources = try? await WeatherService.shared.attribution.legalPageURL }
         } header: {
             Text("On Today")
-        } footer: {
-            Text("Weather from Apple Weather (Open-Meteo stands in if it can't answer). Tap the weather card for the 24-hour chart. Metro status live for London (TfL), New York (MTA) and Paris (Île-de-France Mobilités); Automatic picks the nearest, or London. Tap the metro card to fold it away. To move cards, or hide others, tap Edit on Today.")
         }
         .listRowBackground(Theme.card)
     }
@@ -461,8 +479,6 @@ struct SettingsView: View {
             }
         } header: {
             Text("Notifications")
-        } footer: {
-            Text("A one-line teaser of your Today topic when a new briefing is written. iOS decides exactly when Scout checks, usually soon after 6:00.")
         }
         .listRowBackground(Theme.card)
     }
@@ -534,7 +550,7 @@ struct CustomColorsView: View {
                 ColorPicker("Cards", selection: colorBinding(\.card), supportsOpacity: false)
                 Toggle("Same colors in Light and Dark", isOn: $look.appearance.sameInBoth)
             } footer: {
-                Text("Colors you pick here are for \(look.appearance.sameInBoth ? "both Light and Dark mode" : (scheme == .dark ? "Dark mode" : "Light mode")). Main color is for rings, charts, icons and selected buttons; Text is for words, and fainter text is a lighter shade of it; Accent is for highlights, the selected tab and falling prices.")
+                Text("For \(look.appearance.sameInBoth ? "Light and Dark mode" : (scheme == .dark ? "Dark mode" : "Light mode")).")
             }
             .listRowBackground(Theme.card)
 
