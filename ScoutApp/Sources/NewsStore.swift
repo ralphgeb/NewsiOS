@@ -1,9 +1,9 @@
 import SwiftUI
 import WidgetKit
 
-/// The sections along the top of News.
+/// The sections along the top of News: For you (your topics), then the four fixed ones.
 enum NewsSection: String, CaseIterable, Identifiable {
-    case all = "All", tech = "Tech", finance = "Finance", world = "World", fashion = "Fashion"
+    case all = "For you", tech = "Tech", finance = "Finance", world = "World", fashion = "Fashion"
 
     var id: String { rawValue }
     var topic: Topic? { Topic(rawValue: rawValue) }
@@ -52,6 +52,8 @@ final class NewsStore: ObservableObject {
     @Published private(set) var lastError: String?
     @Published private(set) var lastFetch: Date?
     @Published private(set) var saved: [Story] = []
+    /// Stories you've opened, newest first, kept even after they leave the news.
+    @Published private(set) var history: [HistoryEntry] = []
 
     @Published var topic: Topic {
         didSet {
@@ -64,6 +66,13 @@ final class NewsStore: ObservableObject {
         didSet { UserDefaults.standard.set(interests.sorted(), forKey: Self.interestsKey) }
     }
 
+    /// The regions World and Finance (and For you's world and market stories) come from.
+    @Published var regions: Set<String> {
+        didSet { UserDefaults.standard.set(regions.sorted(), forKey: Self.regionsKey) }
+    }
+    static let allRegions = ["UK", "US", "Europe", "Asia"]
+    private static let regionsKey = "news.regions"
+
     private(set) var byId: [String: Story] = [:]
     private static let interestsKey = "news.interests"
     private var cal: Calendar { Calendar.current }
@@ -71,7 +80,9 @@ final class NewsStore: ObservableObject {
     init() {
         topic = Shared.topic
         interests = Set(UserDefaults.standard.stringArray(forKey: Self.interestsKey) ?? [])
+        regions = Set(UserDefaults.standard.stringArray(forKey: Self.regionsKey) ?? Self.allRegions)
         saved = Self.loadSaved()
+        history = Self.loadHistory()
         loadCache()
     }
 
@@ -130,7 +141,7 @@ final class NewsStore: ObservableObject {
 
     func story(_ id: String?) -> Story? {
         guard let id else { return nil }
-        return byId[id] ?? saved.first { $0.id == id }
+        return byId[id] ?? saved.first { $0.id == id } ?? history.first { $0.story.id == id }?.story
     }
 
     // MARK: Ranking (the same as the web app)
@@ -155,12 +166,50 @@ final class NewsStore: ObservableObject {
 
     func newsItems(_ section: NewsSection) -> [Story] {
         let now = Date.now
-        let fresh = stories.filter { $0.published == .distantPast || now.timeIntervalSince($0.published) <= Self.maxAge }
+        let fresh = stories.filter { ($0.published == .distantPast || now.timeIntervalSince($0.published) <= Self.maxAge) && inRegions($0) }
         if let topic = section.topic {
             return fresh.filter { $0.newsSection == topic }.sorted { $0.published > $1.published }
         }
-        let scores = Dictionary(fresh.map { ($0.id, rankScore($0, now: now)) }, uniquingKeysWith: { a, _ in a })
-        return fresh.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) }
+        return forYou(fresh, now: now)
+    }
+
+    /// World and Finance stories from the regions you follow; Global ones, and other sections, always.
+    func inRegions(_ s: Story) -> Bool {
+        guard s.newsSection == .world || s.newsSection == .finance,
+              let r = s.region, Self.allRegions.contains(r) else { return true }
+        return regions.isEmpty || regions.contains(r)
+    }
+
+    /// Whether a story is on one of your topics.
+    func matchesInterests(_ s: Story) -> Bool {
+        !interests.isEmpty && (s.topics ?? []).contains { interests.contains($0) }
+    }
+
+    /// For you: stories on your topics, ranked by importance, with the day's very biggest stories
+    /// mixed in so nothing major passes you by, and never more than three in a row on one topic.
+    /// Before any topics are picked it's simply the most important stories.
+    func forYou(_ pool: [Story], now: Date = .now) -> [Story] {
+        guard !interests.isEmpty else {
+            let scores = Dictionary(pool.map { ($0.id, rankScore($0, now: now)) }, uniquingKeysWith: { a, _ in a })
+            return pool.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) }
+        }
+        let picked = pool.filter { matchesInterests($0) || ($0.importance ?? 0) >= 8 }
+        let scores = Dictionary(picked.map { ($0.id, rankScore($0, now: now) + (matchesInterests($0) ? 4 : 0)) }, uniquingKeysWith: { a, _ in a })
+        var queue = picked.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) }
+        // spread topics out: a story whose main topic matches the last three waits its turn
+        var out: [Story] = []
+        while !queue.isEmpty {
+            let recent = out.suffix(3).compactMap { $0.topics?.first }
+            let i = queue.firstIndex { s in !(recent.count == 3 && Set(recent).count == 1 && s.topics?.first == recent[0]) } ?? 0
+            out.append(queue.remove(at: i))
+        }
+        return out
+    }
+
+    /// The topic that put a story in For you, for the small line on its card.
+    func reason(_ s: Story) -> String? {
+        if let t = (s.topics ?? []).first(where: { interests.contains($0) }) { return "Because you follow \(t)" }
+        return (s.importance ?? 0) >= 8 ? "One of today's biggest stories" : nil
     }
 
     /// Every story that names a company, newest first.
@@ -179,6 +228,7 @@ final class NewsStore: ObservableObject {
     /// Today's front page: the latest briefing for your topic, or the biggest stories of the last
     /// 30 hours while the first one is being written.
     func frontPage(edition: String?) -> FrontPage? {
+        if !interests.isEmpty { return forYouPage() }
         let since = Date.now.addingTimeInterval(-30 * 3600)
         let pool = stories
             .filter { $0.newsSection == topic && $0.published >= since }
@@ -232,8 +282,62 @@ final class NewsStore: ObservableObject {
             reviewed: pool.count, isWritten: false, editions: [], editionID: nil)
     }
 
+    /// Today when you've picked topics: your biggest story on the cover, then your top stories,
+    /// the companies to watch from the briefings of your sections, and more on your topics.
+    func forYouPage() -> FrontPage? {
+        let since = Date.now.addingTimeInterval(-30 * 3600)
+        let ranked = forYou(stories.filter { $0.published >= since && inRegions($0) })
+        guard !ranked.isEmpty else { return nil }
+        let cover = ranked.prefix(4).first { $0.imageURL != nil } ?? ranked[0]
+        let rest = ranked.filter { $0.id != cover.id }
+        // the sections your topics belong to, for their briefings' movers
+        let sections = Topic.allCases.filter { t in t.interests.contains { interests.contains($0) } }
+        var seen = Set<String>()
+        let movers = sections.compactMap { briefing.section($0) }.flatMap(\.movers).filter { seen.insert($0.ticker).inserted }
+        return FrontPage(
+            label: "For you", generated: updated, title: cover.title, intro: [], cover: cover,
+            items: rest.prefix(7).map { FrontPage.Item(id: $0.id, story: $0, title: $0.title, text: reason($0)) },
+            rumours: [], movers: Array(movers.prefix(6)), moversTitle: "Companies to watch", brief: [],
+            more: Array(rest.dropFirst(7).prefix(6)),
+            reviewed: ranked.count, isWritten: true, editions: [], editionID: nil)
+    }
+
     static func paragraphs(_ text: String?) -> [String] {
         (text ?? "").components(separatedBy: "\n\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    // MARK: History
+
+    /// Puts a story at the top of History (once, however often it's opened).
+    func remember(_ story: Story) {
+        if history.first?.story.id == story.id { return }
+        history.removeAll { $0.story.id == story.id }
+        history.insert(HistoryEntry(story: story, opened: .now), at: 0)
+        if history.count > 300 { history.removeLast(history.count - 300) }
+        persistHistory()
+    }
+
+    func forget(_ id: String) {
+        history.removeAll { $0.story.id == id }
+        persistHistory()
+    }
+
+    func clearHistory() {
+        history = []
+        persistHistory()
+    }
+
+    private static var historyURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appending(path: "history.json")
+    }
+
+    private static func loadHistory() -> [HistoryEntry] {
+        guard let data = try? Data(contentsOf: historyURL) else { return [] }
+        return (try? Feed.decoder.decode([HistoryEntry].self, from: data)) ?? []
+    }
+
+    private func persistHistory() {
+        if let data = try? Feed.encoder.encode(history) { try? data.write(to: Self.historyURL, options: .atomic) }
     }
 
     // MARK: Saved
@@ -265,5 +369,32 @@ final class NewsStore: ObservableObject {
 
     private func persistSaved() {
         if let data = try? Feed.encoder.encode(saved) { try? data.write(to: Self.savedURL, options: .atomic) }
+    }
+}
+
+/// A story you opened, and when.
+struct HistoryEntry: Codable, Identifiable {
+    var story: Story
+    var opened: Date
+    var id: String { story.id }
+
+    init(story: Story, opened: Date) {
+        self.story = story
+        self.opened = opened
+    }
+
+    // dates as ISO text, like the news files (the shared decoder has no date strategy)
+    enum CodingKeys: String, CodingKey { case story, opened }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        story = try c.decode(Story.self, forKey: .story)
+        opened = ISODate.parse(try c.decode(String.self, forKey: .opened)) ?? .distantPast
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(story, forKey: .story)
+        try c.encode(opened.ISO8601Format(), forKey: .opened)
     }
 }

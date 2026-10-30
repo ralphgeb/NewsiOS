@@ -35,7 +35,7 @@ struct NewsView: View {
             .storyDestinations()
         }
         .sheet(isPresented: $showInterests) {
-            NavigationStack { InterestsView() }
+            TopicsSheet()
                 .environmentObject(store)
                 .presentationDetents([.large])
         }
@@ -82,7 +82,7 @@ struct NewsView: View {
             } else if all.isEmpty {
                 EmptyCard(symbol: "magnifyingglass", title: "Nothing here yet", text: "Try another section.")
             } else {
-                if section == .all, !store.hasChosenInterests {
+                if section == .all, store.interests.isEmpty {
                     interestsPrompt
                 }
                 let cover = section.topic.flatMap { store.briefing.section($0) }
@@ -93,7 +93,7 @@ struct NewsView: View {
                     NavigationLink(value: StoryRoute(id: hero.id, sequence: seq)) { HeroCard(story: hero) }
                         .buttonStyle(PressStyle())
                 }
-                SectionHead(title: section == .all ? "Top stories" : "Latest", detail: "\(all.count) stories")
+                SectionHead(title: section == .all ? (store.interests.isEmpty ? "Top stories" : "For you") : "Latest", detail: "\(all.count) stories")
                 ForEach(chunks(items.filter { $0.id != hero?.id })) { chunk in
                     if let big = chunk.hero {
                         NavigationLink(value: StoryRoute(id: big.id, sequence: seq)) { HeroCard(story: big) }
@@ -150,8 +150,8 @@ struct NewsView: View {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles").foregroundStyle(Theme.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Make All yours").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
-                    Text("Pick your interests and they rank higher here.").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    Text("Make it yours").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
+                    Text("Pick your topics and For you follows them.").font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").foregroundStyle(Theme.tertiary)

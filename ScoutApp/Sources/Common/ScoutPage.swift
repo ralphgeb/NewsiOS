@@ -22,6 +22,10 @@ struct ScoutPage<Pinned: View, Content: View>: View {
     @ViewBuilder var content: () -> Content
 
     @State private var offset: CGFloat = 0
+    /// The header slides away while you scroll down through stories, and comes back as soon as
+    /// you scroll up, so the page can use the whole screen.
+    @State private var headerHidden = false
+    @State private var lastOffset: CGFloat = 0
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -52,11 +56,33 @@ struct ScoutPage<Pinned: View, Content: View>: View {
                            pull: onRefresh == nil ? 0 : max(0, -offset))
                 pinned()
             }
-            .background(Theme.background.ignoresSafeArea(edges: .top))
+            .background(Theme.background)
             .overlay(alignment: .bottom) {
-                Rectangle().fill(Theme.hairline).frame(height: 0.5).opacity(offset > 4 ? 1 : 0)
+                Rectangle().fill(Theme.hairline).frame(height: 0.5).opacity(offset > 4 && !headerHidden ? 1 : 0)
             }
+            .offset(y: headerHidden ? -(PageHeader.height + pinnedHeight + 12) : 0)
+            .opacity(headerHidden ? 0 : 1)
+            .animation(.snappy(duration: 0.32), value: headerHidden)
+
+            // the status bar keeps a solid background, so text never scrolls under the clock
+            Theme.background
+                .frame(height: 0)
+                .ignoresSafeArea(edges: .top)
         }
+        .onChange(of: offset) { _, y in
+            let delta = y - lastOffset
+            if y < PageHeader.height + pinnedHeight || editing?.wrappedValue == true {
+                headerHidden = false          // near the top, or editing: always shown
+            } else if delta > 8 {
+                headerHidden = true           // moving down the page
+            } else if delta < -8 {
+                headerHidden = false          // moving back up
+            } else {
+                return                        // small wobbles don't count
+            }
+            lastOffset = y
+        }
+        .onChange(of: pageKey) { _, _ in headerHidden = false }
         .background(Theme.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
     }

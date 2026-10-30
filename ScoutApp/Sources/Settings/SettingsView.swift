@@ -53,8 +53,8 @@ struct SettingsView: View {
                         // the welcome covers the app once Settings has closed
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { onboarded = false }
                     }
-                    explainer("Today", "Each morning at 6:00 the ScoutAI updater reads about 100 news sites, and AI writes a front page for Tech, Finance, World and Fashion: the main events, the key stories and what to watch. Tech also gets an evening edition. Pull Today down to refresh.")
-                    explainer("All", "Ranked by importance: how big the story is (an AI score and its market impact), how many outlets cover it, how recent it is, and a small boost for your interests. It loses half its weight every 30 hours. The sections run newest first.")
+                    explainer("Today", "Each morning at 6:00 the ScoutAI updater reads about 150 news sites, and AI writes a briefing for Tech, Finance, World and Fashion (World and Finance cover the US, the UK, Europe and Asia). Today shows your For you front page: the main events, the key stories and what to watch. Tech also gets an evening edition. Pull Today down to refresh.")
+                    explainer("For you", "Stories on your topics, ranked by importance: how big the story is (an AI score and its market impact), how many outlets cover it and how recent it is. The day's very biggest stories are mixed in, and no more than three in a row share a topic. Scout reads about 150 news sites from the UK, the US, Europe and Asia. The sections run newest first.")
                     explainer("Rumour odds", "For unconfirmed stories the AI weighs who is reporting it, how many outlets agree and what the companies say. Likely is 65% and up, a toss-up 35 to 64%. When a rumour comes true or is denied, its label changes.")
                     explainer("Stocks", "Prices for about 3,500 stocks, indices, currencies and cryptos update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Stocks you follow, America's biggest companies and the stocks in the news also get charts and key numbers; the ones you follow and the biggest get an AI summary each morning.")
                     explainer("Market impact", "Which companies a story could move, up or down, and by how much: one dot is low, three is high. Tap a company for every story that names it.")
@@ -82,13 +82,18 @@ struct SettingsView: View {
 
     private var newsSection: some View {
         Section {
-            Picker("Today is about", selection: $store.topic) {
-                ForEach(Topic.allCases) { Text($0.title).tag($0) }
+            NavigationLink {
+                TopicsPage()
+            } label: {
+                row("Your topics", store.interests.isEmpty ? "None yet" : "\(store.interests.count)")
             }
             NavigationLink {
-                InterestsView()
+                TopicsPage()
             } label: {
-                row("News interests", store.interests.isEmpty ? "None" : "\(store.interests.count)")
+                row("Regions", store.regions.count == NewsStore.allRegions.count ? "All" : NewsStore.allRegions.filter(store.regions.contains).joined(separator: ", "))
+            }
+            Picker("Widget briefing", selection: $store.topic) {
+                ForEach(Topic.allCases) { Text($0.title).tag($0) }
             }
             Button {
                 Task { await store.refresh() }
@@ -110,7 +115,7 @@ struct SettingsView: View {
         } header: {
             Text("News")
         } footer: {
-            Text("Interests rank stories higher under All. News and Today are written at 6:00 each morning, London time; Scout fetches them whenever you open it.")
+            Text("For you on Today and in News follows your topics; Regions sets where World and Finance stories come from. The widget shows the briefing you pick here. News and the briefings are written at 6:00 each morning, London time; Scout fetches them whenever you open it.")
         }
         .listRowBackground(Theme.card)
     }
@@ -287,56 +292,6 @@ struct SettingsView: View {
         }
         .padding(.vertical, 2)
         .listRowBackground(Theme.card)
-    }
-}
-
-/// Topics ranked higher under All, grouped by section.
-struct InterestsView: View {
-    @EnvironmentObject private var store: NewsStore
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        Form {
-            ForEach(Topic.allCases) { topic in
-                Section(topic.title) {
-                    ForEach(topic.interests, id: \.self) { t in
-                        Button {
-                            withAnimation(.snappy) {
-                                if store.interests.contains(t) { store.interests.remove(t) } else { store.interests.insert(t) }
-                            }
-                        } label: {
-                            HStack {
-                                Text(t).foregroundStyle(Theme.text)
-                                Spacer()
-                                if store.interests.contains(t) {
-                                    Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.accent)
-                                }
-                            }
-                        }
-                    }
-                }
-                .listRowBackground(Theme.card)
-            }
-            Section {
-                if !store.interests.isEmpty {
-                    Button("Clear all", role: .destructive) { withAnimation(.snappy) { store.interests.removeAll() } }
-                }
-            } footer: {
-                Text("Stories on these topics rank higher under All in News.")
-            }
-            .listRowBackground(Theme.card)
-        }
-        .scrollContentBackground(.hidden)
-        .background(Theme.background.ignoresSafeArea())
-        .navigationTitle("News interests")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") { dismiss() }
-            }
-        }
-        .tint(Theme.ink)
-        .sensoryFeedback(.selection, trigger: store.interests)
     }
 }
 

@@ -44,6 +44,9 @@ struct StoryPager: View {
         }
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $current)
+        // every story you read goes into History
+        .onAppear { if let story { store.remember(story) } }
+        .onChange(of: current) { _, _ in if let story { store.remember(story) } }
         .scrollIndicators(.hidden)
         .scrollDisabled(list.count < 2)
         .background(Theme.background.ignoresSafeArea())

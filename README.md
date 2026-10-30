@@ -2,15 +2,15 @@
 
 The native iPhone app for ScoutAI: your morning briefing on tech, finance, world and fashion news, with live stocks, built in the same style as Halo and the calendar widget app: the same palettes and settings, type, cards and interactions. The icon (a hub of connected nodes, with ScoutAI's red dot) and the default **Scout** colours come from ScoutAI.
 
-- **Today**: the front page for your topic (Tech, Finance, World or Fashion): a cover with the headline over the lead picture, the top stories, the companies to watch and In brief. Tech has a morning and an evening edition. Weather (Apple WeatherKit: the next 12 hours as icons; tap for the 24-hour chart, and Apple Weather's credit is in Settings), live metro status for London, New York or Paris (folded at first; tap for every line) and the markets sit at the top. The AI overview is on the News page, which is headed "Your morning briefing".
+- **Today**: your **For you** front page: your biggest story on the cover, then your top stories (each says why: "Because you follow AI"), the companies to watch from your sections' briefings and more on your topics. Before you pick topics it shows one section's briefing. Weather (Apple WeatherKit: the next 12 hours as icons; tap for the 24-hour chart, and Apple Weather's credit is in Settings), live metro status for London, New York or Paris (folded at first; tap for every line) and the markets sit at the top.
   - Tap **Edit** to drag cards into your own order, or hide the ones you don't want, as on Halo's Today.
   - Every page has the same header: a big title with one line under it. Pull any page down to refresh.
-- **News**: every story from about 100 sites. **All** is ranked by importance and your interests; Tech, Finance, World and Fashion open with that section's front page. Swipe sideways between sections; pull down for the latest.
+- **News**: For you, Tech, Finance, World and Fashion. For you follows your topics, with the day's biggest stories mixed in and no more than three in a row on one topic; the four sections open with their AI summary (World and Finance cover the US, the UK, Europe and Asia) and run newest first. World and Finance show the regions you follow (Settings › Regions). Each section keeps its own scroll position.
 - **Stocks**: indices, the pound, bitcoin, gold and oil along the top; your stocks; the stocks in Scout's stories (15, then Show all); the top ten US companies. Prices update every 30 minutes on weekdays (7:00 to 22:30 UK time), and the page picks up each update while it's open. Tap a change to switch between %, the price change and market value. **Add** searches about 50,000 stocks, funds, indices, currencies and cryptos by name or ticker. A stock's page has a chart you can drag across (1D, 1M, 1Y), key numbers, the AI's "What's happening", headlines and every Scout story that names it.
-- **Saved**: bookmark any story; it stays even after it leaves the news.
+- **History**: every story you've opened, grouped by day, with your saved stories one tap away. Kept after the stories leave the news.
 - **Stories**: the picture, the AI summary with key points, the rumour check, the market impact (tap a company for every story that names it) and every outlet covering it. Swipe left and right between stories. The button at the bottom opens the original article in Safari.
 - **Settings**: the same Appearance section as Halo (Automatic, Light or Dark, six presets, four typefaces, and a Custom colors page for your own main, text, accent, background and card colours in Light and Dark), your Today topic, news interests, weather location, metro city, with the morning briefing notification at the top.
-- **Welcome**: on first launch, before any permission is asked: the logo growing out of its centre in one movement, without its tile, then breathing gently, "Your morning news, simplified", how Scout works, and why it asks for your location (the weather). Then the Today topic.
+- **Welcome**: on first launch, before any permission is asked: your topics and regions (bubbles, as in Apple News), the logo growing out of its centre in one movement, without its tile, then breathing gently, "Your morning news, simplified", how Scout works, and why it asks for your location (the weather). Then the Today topic.
 - **Widget**: your briefing's headline and top stories (small, medium, large and Lock Screen), in your colours.
 
 SwiftUI, iOS 17+, no third-party libraries.
@@ -47,7 +47,7 @@ ScoutApp/
     Today/                 front page cards, weather, metro status
     News/                  sections and section covers
     Stocks/                live prices, search, stock pages
-    Saved/                 bookmarks
+    History/               stories you opened, and your saved ones
     Story/                 story pages, swiping between them, company pages
     Settings/              appearance, topic, interests, notifications
   Shared/                compiled into the app and the widget

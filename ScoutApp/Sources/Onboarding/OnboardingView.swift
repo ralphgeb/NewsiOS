@@ -4,6 +4,7 @@ import SwiftUI
 /// and why it would like your location. Three quiet pages, then Today.
 struct OnboardingView: View {
     @EnvironmentObject private var weather: WeatherModel
+    @EnvironmentObject private var store: NewsStore
     var finish: () -> Void
     @State private var page = 0
 
@@ -12,7 +13,8 @@ struct OnboardingView: View {
             TabView(selection: $page) {
                 welcome.tag(0)
                 howItWorks.tag(1)
-                location.tag(2)
+                topics.tag(2)
+                location.tag(3)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.smooth, value: page)
@@ -20,31 +22,31 @@ struct OnboardingView: View {
             // dots on the left say there's more to swipe; the next step sits small on the right
             HStack(alignment: .center) {
                 HStack(spacing: 6) {
-                    ForEach(0..<3) { i in
+                    ForEach(0..<4) { i in
                         Capsule()
                             .fill(i == page ? Theme.ink : Theme.ink.opacity(0.18))
                             .frame(width: i == page ? 16 : 6, height: 6)
                     }
                 }
                 .animation(.snappy, value: page)
-                .accessibilityLabel("Page \(page + 1) of 3")
+                .accessibilityLabel("Page \(page + 1) of 4")
                 Spacer()
-                if page == 2 {
-                    Button("Not now") { finish() }
+                if page == 3 {
+                    Button("Not now") { done() }
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Theme.secondary)
                         .padding(.trailing, 14)
                 }
                 Button {
-                    if page < 2 {
+                    if page < 3 {
                         page += 1
                     } else {
                         weather.requestPermission()
-                        finish()
+                        done()
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Text(page < 2 ? "Next" : "Allow location")
+                        Text(page < 3 ? "Next" : "Allow location")
                         Image(systemName: "arrow.right").font(.system(size: 13, weight: .semibold))
                     }
                     .font(.system(size: 15, weight: .semibold))
@@ -63,7 +65,37 @@ struct OnboardingView: View {
         .sensoryFeedback(.selection, trigger: page)
     }
 
+    private func done() {
+        if !Shared.hasChosenTopic { Shared.topic = .tech }   // the widget's briefing, until changed in Settings
+        finish()
+    }
+
     // MARK: Pages
+
+    private var topics: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("What do you follow?")
+                        .font(.system(size: 26, weight: .semibold))
+                        .tracking(-0.3)
+                        .foregroundStyle(Theme.text)
+                    Text(store.interests.count < 3
+                         ? "Pick three or more. For you follows them, with the day's biggest stories mixed in."
+                         : "\(store.interests.count) picked. You can change these any time in Settings.")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.text.opacity(0.65))
+                        .contentTransition(.opacity)
+                }
+                TopicChips()
+                RegionChips()
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 40)
+            .padding(.bottom, 20)
+        }
+        .scrollIndicators(.hidden)
+    }
 
     private var welcome: some View {
         VStack(spacing: 26) {
@@ -99,11 +131,11 @@ struct OnboardingView: View {
                 .foregroundStyle(Theme.text)
                 .padding(.bottom, 4)
             point("sun.horizon", "A briefing by 7:00",
-                  "Every morning Scout reads about 100 news sites and writes one briefing for Tech, Finance, World and Fashion: what happened, why it matters and what to watch.")
+                  "Every morning Scout reads about 150 news sites from the UK, the US, Europe and Asia, and writes briefings on what happened, why it matters and what to watch.")
             point("cup.and.saucer", "It doesn't break news",
                   "It gathers the night's breaking news into one short, clear front page, ready before your first coffee.")
             point("chart.line.uptrend.xyaxis", "The rest of your morning",
-                  "The stocks you follow, the weather and the metro, all on Today.")
+                  "A front page built around your topics, plus your stocks, the weather and the metro, all on Today.")
             Spacer()
         }
         .padding(.horizontal, 32)

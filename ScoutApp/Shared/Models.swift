@@ -18,6 +18,8 @@ struct Story: Codable, Identifiable, Hashable {
     var likelihoodReason: String?
     var signals: [String]?
     var topics: [String]?
+    /// Where the story mainly happens: UK, US, Europe, Asia or Global.
+    var region: String?
     var overallImpact: String?
     var importance: Double?
     var marketTake: String?
@@ -29,7 +31,7 @@ struct Story: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, headline, section, image, imageCredit, status, claim, summary, keyPoints, likelihood,
-             likelihoodReason, signals, topics, overallImpact, importance, marketTake, stocks, sources,
+             likelihoodReason, signals, topics, region, overallImpact, importance, marketTake, stocks, sources,
              firstSeen, firstPublished, lastUpdated
     }
 
@@ -48,6 +50,7 @@ struct Story: Codable, Identifiable, Hashable {
         likelihoodReason = c.lenient(.likelihoodReason)
         signals = c.lenient(.signals)
         topics = c.lenient(.topics)
+        region = c.lenient(.region)
         overallImpact = c.lenient(.overallImpact)
         importance = c.lenient(.importance)
         marketTake = c.lenient(.marketTake)

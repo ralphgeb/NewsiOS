@@ -53,7 +53,7 @@ struct TodayView: View {
             if note.object as? String == "today" { path = NavigationPath(); editing = false }
         }
         .onChange(of: editing) { _, on in if !on { dragging = nil; dragOffset = 0 } }
-        .sheet(isPresented: $showTopics) { TopicPicker().environmentObject(store).presentationDetents([.medium, .large]) }
+        .sheet(isPresented: $showTopics) { TopicsSheet().environmentObject(store).presentationDetents([.large]) }
         .sensoryFeedback(.impact(weight: .light), trigger: orderRaw)
         .sensoryFeedback(.selection, trigger: hiddenRaw)
         .sensoryFeedback(.impact(weight: .medium), trigger: dragging)
@@ -245,7 +245,7 @@ struct TodayView: View {
         case .top: TopStoriesCard(items: page.items, sequence: seq, title: page.isWritten ? "Top stories" : "Key stories")
         case .movers: MoversCard(title: page.moversTitle, movers: page.movers)
         case .brief: InBriefCard(items: page.brief, sequence: seq)
-        case .more: MoreCard(title: "More in \(store.topic.title)", stories: page.more, sequence: seq)
+        case .more: MoreCard(title: store.interests.isEmpty ? "More in \(store.topic.title)" : "More for you", stories: page.more, sequence: seq)
         }
     }
 
@@ -269,7 +269,7 @@ struct TodayView: View {
     private func footer(_ page: FrontPage) -> some View {
         VStack(spacing: 10) {
             Button { showTopics = true } label: {
-                Label("Change topic", systemImage: store.topic.symbol)
+                Label("Your topics", systemImage: "slider.horizontal.3")
                     .font(.system(size: 14, weight: .semibold))
                     .padding(.horizontal, 16)
                     .frame(height: 36)
@@ -612,52 +612,3 @@ struct MoreCard: View {
     }
 }
 
-/// Asks what Today should be about: on first launch, and from "Change topic".
-struct TopicPicker: View {
-    @EnvironmentObject private var store: NewsStore
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("What should Today be about?").font(Theme.headline(24, weight: .bold)).foregroundStyle(Theme.text)
-                Text("Each topic has its own front page every morning: the main events, the key stories and what to watch.")
-                    .font(.system(size: 14)).foregroundStyle(Theme.secondary)
-            }
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(Topic.allCases) { t in
-                    let on = store.topic == t
-                    Button {
-                        withAnimation(.snappy) { store.topic = t }
-                        Shared.topic = t      // remembers that a topic was chosen, even the default
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(250))
-                            dismiss()
-                        }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Image(systemName: t.symbol).font(.system(size: 20, weight: .medium))
-                                .foregroundStyle(on ? Theme.accent : Theme.ink)
-                            Text(t.title).font(Theme.headline(18)).foregroundStyle(Theme.text)
-                            Text(t.detail).font(.system(size: 12)).foregroundStyle(Theme.secondary)
-                                .multilineTextAlignment(.leading)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, minHeight: 130, alignment: .topLeading)
-                        .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(on ? Theme.accent : Color.clear, lineWidth: 2))
-                    }
-                    .buttonStyle(PressStyle())
-                }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(20)
-        .padding(.top, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.background.ignoresSafeArea())
-        .sensoryFeedback(.selection, trigger: store.topic)
-    }
-}

@@ -99,8 +99,6 @@ struct RootView: View {
     @EnvironmentObject private var weather: WeatherModel
     @EnvironmentObject private var tube: TubeService
     @State private var showSettings = false
-    /// Straight after the welcome, a new install picks Today's topic.
-    @State private var showTopics = !Shared.hasChosenTopic
     @State private var tab = 0
 
     var body: some View {
@@ -118,9 +116,9 @@ struct RootView: View {
                 .tint(Theme.ink)
                 .tabItem { Label("Stocks", systemImage: "chart.line.uptrend.xyaxis") }
                 .tag(2)
-            SavedView(showSettings: $showSettings)
+            HistoryView(showSettings: $showSettings)
                 .tint(Theme.ink)
-                .tabItem { Label("Saved", systemImage: "bookmark") }
+                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
                 .tag(3)
         }
         // Colors are read when views draw, so a new look rebuilds the pages (the sheet stays open).
@@ -137,22 +135,15 @@ struct RootView: View {
                 .environmentObject(tube)
                 .preferredColorScheme(look.appearance.mode.colorScheme)
         }
-        .sheet(isPresented: $showTopics) {
-            TopicPicker()
-                .environmentObject(store)
-                .presentationDetents([.medium, .large])
-                .interactiveDismissDisabled(!Shared.hasChosenTopic)
-                .preferredColorScheme(look.appearance.mode.colorScheme)
-        }
         .onOpenURL { url in
-            // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://saved.
+            // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://history.
             // Settings closes and the page goes back to its top, wherever you'd left it.
             showSettings = false
             NotificationCenter.default.post(name: .scoutShowPage, object: url.host ?? "today")
             switch url.host {
             case "news": tab = 1
             case "stocks": tab = 2
-            case "saved": tab = 3
+            case "history", "saved": tab = 3
             default: tab = 0
             }
         }
