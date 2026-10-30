@@ -336,8 +336,16 @@ struct SectionBrief: Decodable, Hashable {
     var summary: String?
     var points: [BriefLine]
     var movers: [Mover]
+    /// Short labelled cards under the lead paragraph ("US: …", "Markets: …").
+    var highlights: [Highlight]
 
-    enum CodingKeys: String, CodingKey { case generated, leadStoryId, title, notification, summary, points, movers }
+    struct Highlight: Decodable, Hashable {
+        var label: String
+        var text: String
+        var storyId: String?
+    }
+
+    enum CodingKeys: String, CodingKey { case generated, leadStoryId, title, notification, summary, points, movers, highlights }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -348,6 +356,7 @@ struct SectionBrief: Decodable, Hashable {
         summary = c.lenient(.summary)
         points = c.lenientArray(.points) ?? []
         movers = c.lenientArray(.movers) ?? []
+        highlights = c.lenientArray(.highlights) ?? []
     }
 }
 

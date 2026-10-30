@@ -346,18 +346,22 @@ struct StoryRow: View {
 struct StoryList: View {
     let stories: [Story]
     let sequence: [String]
+    /// Stories under the paywall preview's veil.
+    var locked: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(stories) { s in
                 NavigationLink(value: StoryRoute(id: s.id, sequence: sequence)) { StoryRow(story: s) }
                     .buttonStyle(PressStyle())
+                    .locked(locked.contains(s.id))
                 if s.id != stories.last?.id {
                     Rectangle().fill(Theme.hairline).frame(height: 0.5).padding(.leading, 16)
                 }
             }
         }
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
 

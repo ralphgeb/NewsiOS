@@ -39,6 +39,7 @@ struct SettingsView: View {
     @AppStorage(Notifier.enabledKey) private var notify = false
     @State private var notifyNote: String?
     @State private var weatherSources: URL?
+    @AppStorage(Paywall.key) private var paywall = false
 
     var body: some View {
         NavigationStack {
@@ -59,6 +60,14 @@ struct SettingsView: View {
                     explainer("Stocks", "Prices for about 3,500 stocks, indices, currencies and cryptos update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Stocks you follow, America's biggest companies and the stocks in the news also get charts and key numbers; the ones you follow and the biggest get an AI summary each morning.")
                     explainer("Market impact", "Which companies a story could move, up or down, and by how much: one dot is low, three is high. Tap a company for every story that names it.")
                 }
+                Section {
+                    Toggle("Paywall preview", isOn: $paywall)
+                } header: {
+                    Text("Preview")
+                } footer: {
+                    Text("Shows how Scout would look with a subscription: the first 12 stories in each list stay open and the rest are locked. Nothing is sold or charged.")
+                }
+                .listRowBackground(Theme.card)
                 Section {
                 } footer: {
                     Text("Summaries, odds and market effects are written by AI in its own words and can be wrong. Not financial advice. Every story links to the original.")
@@ -87,11 +96,8 @@ struct SettingsView: View {
             } label: {
                 row("Your topics", store.interests.isEmpty ? "None yet" : "\(store.interests.count)")
             }
-            NavigationLink {
-                TopicsPage()
-            } label: {
-                row("Regions", store.regions.count == NewsStore.allRegions.count ? "All" : NewsStore.allRegions.filter(store.regions.contains).joined(separator: ", "))
-            }
+            RegionChips()
+                .padding(.vertical, 6)
             Picker("Widget briefing", selection: $store.topic) {
                 ForEach(Topic.allCases) { Text($0.title).tag($0) }
             }

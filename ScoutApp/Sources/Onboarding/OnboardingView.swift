@@ -74,25 +74,25 @@ struct OnboardingView: View {
 
     private var topics: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("What do you follow?")
                         .font(.system(size: 26, weight: .semibold))
                         .tracking(-0.3)
                         .foregroundStyle(Theme.text)
                     Text(store.interests.count < 3
-                         ? "Pick three or more. For you follows them, with the day's biggest stories mixed in."
+                         ? "Pick three or more topics. For you follows them, with the day's biggest stories mixed in."
                          : "\(store.interests.count) picked. You can change these any time in Settings.")
                         .font(.system(size: 15))
                         .foregroundStyle(Theme.text.opacity(0.65))
                         .contentTransition(.opacity)
                 }
-                TopicChips()
-                RegionChips()
+                RegionChips(compact: true)
+                TopicChips(compact: true)
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 40)
-            .padding(.bottom, 20)
+            .padding(.horizontal, 24)
+            .padding(.top, 28)
+            .padding(.bottom, 12)
         }
         .scrollIndicators(.hidden)
     }

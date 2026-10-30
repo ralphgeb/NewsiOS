@@ -10,6 +10,7 @@ struct NewsView: View {
     @State private var limits: [NewsSection: Int] = [:]
     @State private var forward = true
     @State private var showInterests = false
+    @AppStorage(Paywall.key) private var paywall = false
 
     private var section: NewsSection { NewsSection(rawValue: sectionRaw) ?? .all }
 
@@ -71,6 +72,8 @@ struct NewsView: View {
         let all = store.newsItems(section)
         let items = Array(all.prefix(limits[section] ?? 40))
         let seq = items.map(\.id)
+        // the paywall preview: the first 12 stories open, the rest locked
+        let locked: Set<String> = paywall ? Set(items.dropFirst(Paywall.freeStories).map(\.id)) : []
         VStack(spacing: 14) {
             if store.stories.isEmpty {
                 if store.isLoading {
@@ -98,8 +101,10 @@ struct NewsView: View {
                     if let big = chunk.hero {
                         NavigationLink(value: StoryRoute(id: big.id, sequence: seq)) { HeroCard(story: big) }
                             .buttonStyle(PressStyle())
+                            .locked(locked.contains(big.id))
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     } else {
-                        StoryList(stories: chunk.rows, sequence: seq)
+                        StoryList(stories: chunk.rows, sequence: seq, locked: locked)
                     }
                 }
                 if all.count > items.count {
@@ -171,6 +176,15 @@ struct SectionCover: View {
     @EnvironmentObject private var store: NewsStore
 
     var body: some View {
+        VStack(spacing: 14) {
+            leadCard
+            highlightsCard
+            if !brief.movers.isEmpty { moversCard }
+        }
+    }
+
+    // The picture, the headline of the day and one paragraph.
+    private var leadCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             NavigationLink(value: lead.map { StoryRoute(id: $0.id, sequence: sequence) }) {
                 StoryImage(story: lead).frame(height: 190)
@@ -184,58 +198,9 @@ struct SectionCover: View {
                 }
                 Text(brief.title).font(Theme.headline(22, weight: .bold)).foregroundStyle(Theme.text)
                     .fixedSize(horizontal: false, vertical: true)
-                ForEach(NewsStore.paragraphs(brief.summary), id: \.self) { p in
-                    Text(p).font(.system(size: 14)).foregroundStyle(Theme.text.opacity(0.8))
+                if let first = NewsStore.paragraphs(brief.summary).first {
+                    Text(first).font(.system(size: 15)).lineSpacing(2).foregroundStyle(Theme.text.opacity(0.85))
                         .fixedSize(horizontal: false, vertical: true)
-                }
-                if !brief.points.isEmpty {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(brief.points.enumerated()), id: \.offset) { _, p in
-                            NavigationLink(value: store.story(p.storyId).map { StoryRoute(id: $0.id, sequence: sequence) }) {
-                                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                    Circle().fill(Theme.ink.opacity(0.4)).frame(width: 5, height: 5).offset(y: -2)
-                                    Text(p.line).font(.system(size: 14)).foregroundStyle(Theme.text)
-                                        .multilineTextAlignment(.leading)
-                                    Spacer(minLength: 0)
-                                    if p.storyId != nil {
-                                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.tertiary)
-                                    }
-                                }
-                                .padding(.vertical, 7)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(PressStyle())
-                            .disabled(store.story(p.storyId) == nil)
-                        }
-                    }
-                }
-                if !brief.movers.isEmpty {
-                    Text(topic.moversTitle).scoutLabel().padding(.top, 4)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(brief.movers) { m in
-                                NavigationLink(value: TickerRoute(ticker: m.ticker, name: m.name)) {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: Direction.arrow(m.direction)).font(.system(size: 9, weight: .bold))
-                                                .foregroundStyle(m.direction == "down" ? Theme.accent : Theme.ink)
-                                            Text(m.ticker).font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundStyle(Theme.text)
-                                        }
-                                        Text(m.name ?? "").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
-                                        if let note = m.note {
-                                            Text(note).font(.system(size: 11)).foregroundStyle(Theme.text.opacity(0.7)).lineLimit(3)
-                                                .multilineTextAlignment(.leading)
-                                        }
-                                    }
-                                    .padding(10)
-                                    .frame(width: 170, height: 96, alignment: .topLeading)
-                                    .background(Theme.track, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                }
-                                .buttonStyle(PressStyle())
-                            }
-                        }
-                    }
-                    .scrollClipDisabled()
                 }
             }
             .padding(18)
@@ -243,5 +208,96 @@ struct SectionCover: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    /// The rest of the day in short pieces: a label in the accent, a sentence or two, and the story
+    /// behind it a tap away. Older briefings without highlights show their key points the same way.
+    private var items: [SectionBrief.Highlight] {
+        if !brief.highlights.isEmpty { return brief.highlights }
+        return brief.points.map { SectionBrief.Highlight(label: "", text: $0.line, storyId: $0.storyId) }
+    }
+
+    @ViewBuilder private var highlightsCard: some View {
+        let list = items
+        if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Highlights").scoutLabel().padding(.horizontal, 18).padding(.top, 16).padding(.bottom, 4)
+                ForEach(Array(list.enumerated()), id: \.offset) { i, h in
+                    let story = store.story(h.storyId)
+                    NavigationLink(value: story.map { StoryRoute(id: $0.id, sequence: sequence) }) {
+                        HStack(alignment: .top, spacing: 14) {
+                            // the bullet: a short accent bar that runs alongside the text
+                            Capsule().fill(Theme.accent).frame(width: 3).frame(maxHeight: .infinity)
+                            VStack(alignment: .leading, spacing: 5) {
+                                if !h.label.isEmpty {
+                                    Text(h.label)
+                                        .font(.system(size: 11, weight: .bold))
+                                        .tracking(0.8)
+                                        .textCase(.uppercase)
+                                        .foregroundStyle(Theme.accent)
+                                }
+                                Text(h.text)
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(Theme.text)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                            if story != nil {
+                                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Theme.tertiary)
+                                    .padding(.top, 2)
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressStyle())
+                    .disabled(story == nil)
+                    if i < list.count - 1 {
+                        Rectangle().fill(Theme.hairline).frame(height: 0.5).padding(.leading, 35)
+                    }
+                }
+            }
+            .padding(.bottom, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+    }
+
+    private var moversCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(topic.moversTitle).scoutLabel()
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(brief.movers) { m in
+                        NavigationLink(value: TickerRoute(ticker: m.ticker, name: m.name)) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: Direction.arrow(m.direction)).font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(m.direction == "down" ? Theme.accent : Theme.ink)
+                                    Text(m.ticker).font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundStyle(Theme.text)
+                                }
+                                Text(m.name ?? "").font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.secondary).lineLimit(1)
+                                if let note = m.note {
+                                    Text(note).font(.system(size: 11)).foregroundStyle(Theme.text.opacity(0.7)).lineLimit(3)
+                                        .multilineTextAlignment(.leading)
+                                }
+                            }
+                            .padding(10)
+                            .frame(width: 170, height: 96, alignment: .topLeading)
+                            .background(Theme.track, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(PressStyle())
+                    }
+                }
+            }
+            .scrollClipDisabled()
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
