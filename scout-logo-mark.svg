@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Scout</title>
+  <g stroke="#131B2C" stroke-width="30" stroke-linecap="round">
+    <line x1="530" y1="500" x2="330" y2="286"/>
+    <line x1="530" y1="500" x2="706" y2="332"/>
+    <line x1="530" y1="500" x2="298" y2="510"/>
+    <line x1="530" y1="500" x2="426" y2="762"/>
+    <line x1="530" y1="500" x2="706" y2="670"/>
+  </g>
+  <circle cx="330" cy="286" r="70" fill="#131B2C"/>
+  <circle cx="706" cy="332" r="76" fill="#E25555"/>
+  <circle cx="298" cy="510" r="44" fill="#959AA2"/>
+  <circle cx="426" cy="762" r="58" fill="#131B2C"/>
+  <circle cx="706" cy="670" r="54" fill="#131B2C"/>
+  <circle cx="530" cy="500" r="92" fill="#131B2C"/>
+</svg>
