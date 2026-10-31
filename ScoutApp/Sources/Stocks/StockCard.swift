@@ -152,7 +152,9 @@ extension NewsPulse {
     var score: Double { total > 0 ? (up - down) / total : 0 }
 }
 
-/// The news pulse, in one of three designs to compare:
+/// The news pulse: a meter of equal thin bars either side of a neutral dot, lit to the right in the
+/// main colour for positive news and to the left in the accent for negative. (Earlier designs to
+/// compare, kept for now:)
 /// 0, a meter of thin bars from a neutral dot in the middle (right for positive, left for negative);
 /// 1, a needle on a track that runs from negative to positive;
 /// 2, positive and negative stories counted side by side.
@@ -162,17 +164,7 @@ struct PulseView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(pulse.verdict).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.text)
-                Spacer()
-                Text("\(pulse.reasons.count) stor\(pulse.reasons.count == 1 ? "y" : "ies") this week")
-                    .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.tertiary)
-            }
-            switch style % 3 {
-            case 0: meter
-            case 1: needle
-            default: counts
-            }
+            meter
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(pulse.verdict), from \(pulse.reasons.count) stories this week")
@@ -196,14 +188,14 @@ struct PulseView: View {
                     let on = pulse.score < 0 && i >= half - lit
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(on ? Theme.accent : Theme.track)
-                        .frame(maxWidth: .infinity).frame(height: 8 + CGFloat(half - i) * 0.6)
+                        .frame(maxWidth: .infinity).frame(height: 14)
                 }
                 Circle().fill(Theme.ink).frame(width: 8, height: 8).padding(.horizontal, 3)
                 ForEach(0..<half, id: \.self) { i in
                     let on = pulse.score > 0 && i < lit
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(on ? Theme.ink : Theme.track)
-                        .frame(maxWidth: .infinity).frame(height: 8 + CGFloat(i) * 0.6)
+                        .frame(maxWidth: .infinity).frame(height: 14)
                 }
             }
             .frame(height: 16)
