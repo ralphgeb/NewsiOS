@@ -16,7 +16,7 @@ final class AppearanceStore: ObservableObject {
     /// True while a look is being tried without Scout Plus.
     @Published private(set) var previewing = false
     private var previewEnds: Task<Void, Never>?
-    static let previewSeconds = 10   // short while testing; 60 for release
+    static let previewSeconds = 60
 
     init() { appearance = Appearance.current }
 
@@ -133,6 +133,15 @@ struct SettingsView: View {
                 appearanceSection
                 iconSection
                 todaySection
+                Section {
+                    if !hasPlus {
+                        Button("Restore purchases") { Task { await PlusStore.shared.restore() } }
+                    }
+                    Link("Privacy policy", destination: Plus.privacyURL)
+                    Link("Terms of use", destination: Plus.termsURL)
+                    Link("Support", destination: Plus.supportURL)
+                }
+                .listRowBackground(Theme.card)
                 Section("How Scout works") {
                     explainer("Today", "Each morning at 6:00 the ScoutAI updater reads about 150 news sites, and AI writes a briefing for Tech, Finance, World and Fashion (World and Finance cover the US, the UK, Europe and Asia). Today shows your For you front page: the main events, the key stories and what to watch. Pull Today down to refresh.")
                     explainer("For you", "Stories on your topics, ranked by importance: how big the story is (an AI score and its market impact), how many outlets cover it and how recent it is. The day's very biggest stories are mixed in, and no more than three in a row share a topic. Scout reads about 150 news sites from the UK, the US, Europe and Asia. The sections run newest first.")
@@ -187,14 +196,6 @@ struct SettingsView: View {
                     Spacer()
                     Text(sinceText).foregroundStyle(Theme.secondary)
                 }
-                Button("Reset to free (for testing)", role: .destructive) {
-                    withAnimation(.snappy) {
-                        hasPlus = false
-                        plusSource = "reset"   // an App Store test subscription is ignored until the next purchase
-                    }
-                    if UIApplication.shared.alternateIconName != nil { UIApplication.shared.setAlternateIconName(nil) }
-                }
-                .foregroundStyle(.red)
                 if plusSource == "store" {
                     Button("Manage subscription") {
                         Task {
@@ -221,9 +222,7 @@ struct SettingsView: View {
             }
         } footer: {
             if hasPlus {
-                Text(plusSource == "store"
-                     ? "Through the App Store."
-                     : "Test subscription: nothing was charged.")
+                Text("Through the App Store.")
             }
         }
         .listRowBackground(Theme.card)

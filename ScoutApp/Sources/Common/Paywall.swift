@@ -2,13 +2,15 @@ import StoreKit
 import SwiftUI
 
 /// Scout Plus. Without it (the default) the summaries, the first stories of each list and the
-/// look presets (for a minute) are free; the rest is locked. The purchase is a test for now:
-/// nothing is charged.
+/// look presets (for a minute) are free; the rest is locked. Bought through the App Store.
 enum Plus {
     static let key = "plus.active"
     static let sinceKey = "plus.since"
-    /// "store" for a real (or sandbox) subscription, "test" for the pretend checkout.
+    /// "store" once bought through the App Store.
     static let sourceKey = "plus.source"
+    static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    static let privacyURL = URL(string: "https://scout-stocks.ralph-gebara.workers.dev/privacy")!
+    static let supportURL = URL(string: "https://scout-stocks.ralph-gebara.workers.dev/support")!
 
     static var isActive: Bool { UserDefaults.standard.bool(forKey: key) }
 
@@ -55,20 +57,26 @@ final class PlusStore: ObservableObject {
         product = try? await Product.products(for: [Self.productID]).first
     }
 
-    /// Plus is on while an App Store subscription is active; a test purchase stays as it is.
+    /// Plus is on while an App Store subscription is active.
     func refresh() async {
         var active = false
         for await result in Transaction.currentEntitlements {
             if case .verified(let t) = result, t.productID == Self.productID, t.revocationDate == nil { active = true }
         }
         let d = UserDefaults.standard
-        if active, d.string(forKey: Plus.sourceKey) != "reset" {
+        if active {
             if !d.bool(forKey: Plus.key) { d.set(Date.now.timeIntervalSince1970, forKey: Plus.sinceKey) }
             d.set(true, forKey: Plus.key)
             d.set("store", forKey: Plus.sourceKey)
-        } else if d.string(forKey: Plus.sourceKey) == "store" {
+        } else {
             d.set(false, forKey: Plus.key)
         }
+    }
+
+    /// Restore purchases: asks the App Store for this Apple account's subscriptions.
+    func restore() async {
+        try? await AppStore.sync()
+        await refresh()
     }
 
     /// Apple's payment sheet (double-click to pay). True once the subscription is active.
@@ -134,8 +142,7 @@ struct LockBadge: View {
     }
 }
 
-/// What Scout Plus includes, and a test checkout: confirm, a moment of processing, then a
-/// welcome. Nothing is charged; Settings can end the test subscription.
+/// What Scout Plus includes and its price; Subscribe opens Apple's payment sheet, then a welcome.
 struct PlusSheet: View {
     /// Why it opened, shown under the title ("Adding stocks is part of Scout Plus").
     var reason: String? = nil
@@ -145,10 +152,11 @@ struct PlusSheet: View {
     @State private var step = Step.offer
     @ObservedObject private var plus = PlusStore.shared
 
-    enum Step { case offer, confirm, paying, done }
+    enum Step { case offer, paying, done }
 
     /// The sheet is as tall as what's in it, measured as it draws.
     @State private var height: CGFloat = 430
+    @State private var unavailable = false
 
     var body: some View {
         VStack(spacing: 14) {
@@ -189,7 +197,7 @@ struct PlusSheet: View {
                 perk("Your own colours, themes and app icons")
             }
             .padding(.horizontal, 8)
-            if step == .offer || (step == .paying && plus.product != nil) {
+            if step == .offer || step == .paying {
                 VStack(spacing: 8) {
                     Button { subscribe() } label: {
                         ZStack {
@@ -206,64 +214,26 @@ struct PlusSheet: View {
                     }
                     .buttonStyle(PressStyle())
                     .disabled(step == .paying)
-                    Text(plus.product == nil ? "Cancel any time. Test purchase: nothing is charged." : "Cancel any time in Settings. Renews monthly.")
-                        .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
+                    if unavailable {
+                        Text("The App Store isn't answering right now. Please try again in a moment.")
+                            .font(.system(size: 12)).foregroundStyle(Theme.accent)
+                    }
+                    // what Apple asks every subscription screen to say
+                    Text("\(plus.price) a month, renews automatically until you cancel. Cancel any time in Settings › your name › Subscriptions.")
+                        .font(.system(size: 11)).foregroundStyle(Theme.tertiary)
+                        .multilineTextAlignment(.center)
+                    HStack(spacing: 14) {
+                        Button("Restore purchases") { Task { await plus.restore(); if Plus.isActive { dismiss() } } }
+                        Link("Terms", destination: Plus.termsURL)
+                        Link("Privacy", destination: Plus.privacyURL)
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.secondary)
                 }
                 .padding(.top, 14)   // a little air between the perks and the button
                 .transition(.opacity)
-            } else {
-                confirm.transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-    }
-
-    /// The confirm step: what you're buying and the price, then one tap.
-    private var confirm: some View {
-        VStack(spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Scout Plus").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
-                    Text("Monthly · renews automatically").font(.system(size: 13)).foregroundStyle(Theme.secondary)
-                }
-                Spacer()
-                Text("\(plus.price)/mo").font(Theme.number(17, weight: .semibold)).foregroundStyle(Theme.text)
-            }
-            Rectangle().fill(Theme.hairline).frame(height: 0.5)
-            Button {
-                step = .paying
-                Task {
-                    try? await Task.sleep(for: .milliseconds(1400))
-                    hasPlus = true
-                    since = Date.now.timeIntervalSince1970
-                    UserDefaults.standard.set("test", forKey: Plus.sourceKey)
-                    step = .done
-                    try? await Task.sleep(for: .milliseconds(1800))
-                    dismiss()
-                }
-            } label: {
-                ZStack {
-                    if step == .paying {
-                        ProgressView().tint(Theme.background)
-                    } else {
-                        Text("Confirm").font(.system(size: 16, weight: .semibold))
-                    }
-                }
-                .frame(maxWidth: .infinity).frame(height: 52)
-                .background(Theme.ink, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .foregroundStyle(Theme.background)
-            }
-            .buttonStyle(PressStyle())
-            .disabled(step == .paying)
-            Text("Test purchase: you won\u{2019}t be charged.")
-                .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
-            Button("Cancel") { withAnimation(.smooth) { step = .offer } }
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Theme.secondary)
-                .frame(height: 32)
-                .disabled(step == .paying)
-        }
-        .padding(18)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private var welcome: some View {
@@ -278,12 +248,9 @@ struct PlusSheet: View {
         .padding(.vertical, 20)
     }
 
-    /// Apple's own payment sheet when the App Store has the product; the test checkout otherwise.
+    /// Apple's own payment sheet.
     private func subscribe() {
-        guard plus.product != nil else {
-            withAnimation(.smooth) { step = .confirm }
-            return
-        }
+        unavailable = false
         step = .paying
         Task {
             if await plus.purchase() {
@@ -291,6 +258,7 @@ struct PlusSheet: View {
                 try? await Task.sleep(for: .milliseconds(1800))
                 dismiss()
             } else {
+                unavailable = plus.product == nil
                 withAnimation(.smooth) { step = .offer }
             }
         }
