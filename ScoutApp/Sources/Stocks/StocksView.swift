@@ -148,7 +148,19 @@ struct StockList: View {
     let symbols: [String]
     var editing = false
 
+    /// The card that's open, if any.
+    @State private var expanded: String?
+
     var body: some View {
+        if editing { rows } else {
+            // each stock its own card, opening in place
+            VStack(spacing: 10) {
+                ForEach(symbols, id: \.self) { s in StockCard(symbol: s, expanded: $expanded) }
+            }
+        }
+    }
+
+    private var rows: some View {
         VStack(spacing: 0) {
             ForEach(symbols, id: \.self) { s in
                 HStack(spacing: 0) {
