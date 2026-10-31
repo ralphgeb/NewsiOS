@@ -10,6 +10,8 @@ struct StockCard: View {
     @AppStorage(Plus.key) private var hasPlus = false
     let symbol: String
     @Binding var expanded: String?
+    /// Which pulse design to show (three to compare for now).
+    var style = 0
 
     private var isOpen: Bool { expanded == symbol }
 
@@ -47,7 +49,7 @@ struct StockCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if pulse.total > 0 { PulseBar(pulse: pulse) }
+            if pulse.total > 0 { PulseView(pulse: pulse, style: style) }
 
             if isOpen {
                 VStack(alignment: .leading, spacing: 12) {
@@ -83,24 +85,29 @@ struct StockCard: View {
                             }
                         }
                     }
+                    // a quiet row, like the app's other links, rather than a big button
                     NavigationLink(value: TickerRoute(ticker: symbol, name: stocks.name(symbol))) {
-                        HStack(spacing: 6) {
-                            Text("Open \(symbol)")
-                            Image(systemName: "arrow.right").font(.system(size: 12, weight: .semibold))
+                        HStack {
+                            Text("Charts and key numbers").font(.system(size: 14, weight: .semibold))
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
                         }
-                        .font(.system(size: 14, weight: .semibold))
-                        .padding(.horizontal, 14).frame(height: 36)
-                        .background(Theme.ink, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .foregroundStyle(Theme.background)
+                        .foregroundStyle(Theme.text)
+                        .padding(.horizontal, 14).frame(height: 42)
+                        .background(Theme.track, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                     .buttonStyle(PressStyle())
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                // fades in where it sits, inside the card
+                .transition(.opacity)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        // the card moves and grows as one piece, and nothing shows outside it while it does
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .geometryGroup()
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .onTapGesture { withAnimation(.snappy(duration: 0.35)) { expanded = isOpen ? nil : symbol } }
         .sensoryFeedback(.impact(weight: .light), trigger: isOpen)
@@ -140,29 +147,112 @@ struct NewsPulse {
     }
 }
 
-/// The pulse as one split bar: up in the main colour, mixed faint, down in the accent.
-struct PulseBar: View {
+extension NewsPulse {
+    /// -1 (all negative) to 1 (all positive); mixed stories pull towards the middle.
+    var score: Double { total > 0 ? (up - down) / total : 0 }
+}
+
+/// The news pulse, in one of three designs to compare:
+/// 0, a meter of thin bars from a neutral dot in the middle (right for positive, left for negative);
+/// 1, a needle on a track that runs from negative to positive;
+/// 2, positive and negative stories counted side by side.
+struct PulseView: View {
     let pulse: NewsPulse
+    var style = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Text(pulse.verdict).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.text)
                 Spacer()
                 Text("\(pulse.reasons.count) stor\(pulse.reasons.count == 1 ? "y" : "ies") this week")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.tertiary)
             }
-            GeometryReader { g in
-                let w = g.size.width, t = max(pulse.total, 1)
-                HStack(spacing: 2) {
-                    if pulse.up > 0 { Capsule().fill(Theme.ink).frame(width: max(6, w * pulse.up / t - 2)) }
-                    if pulse.mixed > 0 { Capsule().fill(Theme.ink.opacity(0.2)).frame(width: max(6, w * pulse.mixed / t - 2)) }
-                    if pulse.down > 0 { Capsule().fill(Theme.accent).frame(width: max(6, w * pulse.down / t - 2)) }
-                }
+            switch style % 3 {
+            case 0: meter
+            case 1: needle
+            default: counts
             }
-            .frame(height: 6)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(pulse.verdict), from \(pulse.reasons.count) stories this week")
+    }
+
+    private var ends: some View {
+        HStack {
+            Text("Negative"); Spacer(); Text("Positive")
+        }
+        .font(.system(size: 10, weight: .medium))
+        .foregroundStyle(Theme.tertiary)
+    }
+
+    // thin bars either side of a dot; they light up outward from the middle
+    private var meter: some View {
+        let half = 12
+        let lit = Int((abs(pulse.score) * Double(half)).rounded())
+        return VStack(spacing: 4) {
+            HStack(spacing: 3) {
+                ForEach(0..<half, id: \.self) { i in
+                    let on = pulse.score < 0 && i >= half - lit
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(on ? Theme.accent : Theme.track)
+                        .frame(maxWidth: .infinity).frame(height: 8 + CGFloat(half - i) * 0.6)
+                }
+                Circle().fill(Theme.ink).frame(width: 8, height: 8).padding(.horizontal, 3)
+                ForEach(0..<half, id: \.self) { i in
+                    let on = pulse.score > 0 && i < lit
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(on ? Theme.ink : Theme.track)
+                        .frame(maxWidth: .infinity).frame(height: 8 + CGFloat(i) * 0.6)
+                }
+            }
+            .frame(height: 16)
+            ends
+        }
+    }
+
+    // a track from negative to positive with a needle where the news sits
+    private var needle: some View {
+        VStack(spacing: 4) {
+            GeometryReader { g in
+                let x = g.size.width * (pulse.score + 1) / 2
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(LinearGradient(colors: [Theme.accent.opacity(0.7), Theme.track, Theme.ink.opacity(0.7)],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .frame(height: 6)
+                    Rectangle().fill(Theme.ink.opacity(0.25)).frame(width: 1, height: 12).offset(x: g.size.width / 2)
+                    Circle()
+                        .fill(Theme.card)
+                        .overlay(Circle().stroke(pulse.score < 0 ? Theme.accent : Theme.ink, lineWidth: 3))
+                        .frame(width: 14, height: 14)
+                        .offset(x: min(max(0, x - 7), g.size.width - 14))
+                }
+                .frame(height: 14)
+            }
+            .frame(height: 14)
+            ends
+        }
+    }
+
+    // positive and negative stories as two counted rows of blocks
+    private var counts: some View {
+        let pos = Int(pulse.up.rounded()), neg = Int(pulse.down.rounded())
+        return HStack(spacing: 14) {
+            row(neg, Theme.accent, "Negative")
+            row(pos, Theme.ink, "Positive")
+        }
+    }
+
+    private func row(_ n: Int, _ colour: Color, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 2) {
+                ForEach(0..<10, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 1.5).fill(i < min(n, 10) ? colour : Theme.track).frame(height: 10)
+                }
+            }
+            Text("\(label) · \(n)").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.tertiary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }

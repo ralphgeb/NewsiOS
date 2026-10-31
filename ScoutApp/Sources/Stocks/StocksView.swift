@@ -155,7 +155,7 @@ struct StockList: View {
         if editing { rows } else {
             // each stock its own card, opening in place
             VStack(spacing: 10) {
-                ForEach(symbols, id: \.self) { s in StockCard(symbol: s, expanded: $expanded) }
+                ForEach(Array(symbols.enumerated()), id: \.element) { i, s in StockCard(symbol: s, expanded: $expanded, style: i) }
             }
         }
     }

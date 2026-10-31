@@ -8,6 +8,7 @@ struct OnboardingView: View {
     var finish: () -> Void
     @State private var page = 0
     @State private var nextReady = false
+    @AppStorage("today.hidden") private var hiddenCards = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -155,7 +156,7 @@ struct OnboardingView: View {
             Spacer()
             WeatherIcon(name: "partly-day", size: 54)
                 .padding(.bottom, 6)
-            Text("Weather where you are")
+            Text("Your area")
                 .font(.system(size: 26, weight: .semibold))
                 .tracking(-0.3)
                 .foregroundStyle(Theme.text)
@@ -166,10 +167,43 @@ struct OnboardingView: View {
                 .foregroundStyle(Theme.text.opacity(0.7))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+
+            // the metro card for your city, asked here; Settings › On Today can change it later
+            Button {
+                withAnimation(.snappy) { showMetro.toggle() }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "tram.fill").font(.system(size: 16)).foregroundStyle(Theme.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Public transport on Today").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
+                        Text("Live metro status in London, New York or Paris").font(.system(size: 12)).foregroundStyle(Theme.secondary)
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: showMetro ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 22))
+                        .foregroundStyle(showMetro ? Theme.ink : Theme.tertiary)
+                }
+                .padding(14)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(PressStyle())
+            .padding(.top, 6)
+            Text("You can change this any time in Settings.")
+                .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
             Spacer()
             Spacer()
         }
-        .padding(.horizontal, 36)
+        .padding(.horizontal, 32)
+    }
+
+    /// Whether Today shows the metro card (the same setting as Settings › On Today).
+    private var showMetro: Bool {
+        get { !hiddenCards.split(separator: ",").contains("tube") }
+        nonmutating set {
+            var cards = hiddenCards.split(separator: ",").map(String.init).filter { $0 != "tube" }
+            if !newValue { cards.append("tube") }
+            hiddenCards = cards.joined(separator: ",")
+        }
     }
 
     private func point(_ symbol: String, _ title: String, _ text: String) -> some View {
