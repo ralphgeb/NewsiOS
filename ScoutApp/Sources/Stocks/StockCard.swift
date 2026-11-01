@@ -186,19 +186,20 @@ struct PulseView: View {
             HStack(spacing: 3) {
                 ForEach(0..<half, id: \.self) { i in
                     let on = pulse.score < 0 && i >= half - lit
+                    // stronger towards the edge
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(on ? Theme.accent : Theme.track)
-                        .frame(maxWidth: .infinity).frame(height: 14)
+                        .fill(on ? Theme.accent.opacity(0.3 + 0.7 * Double(half - i) / Double(half)) : Theme.track)
+                        .frame(maxWidth: .infinity).frame(height: 9)
                 }
-                Circle().fill(Theme.ink).frame(width: 8, height: 8).padding(.horizontal, 3)
+                Circle().fill(Theme.ink).frame(width: 7, height: 7).padding(.horizontal, 3)
                 ForEach(0..<half, id: \.self) { i in
                     let on = pulse.score > 0 && i < lit
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(on ? Theme.ink : Theme.track)
-                        .frame(maxWidth: .infinity).frame(height: 14)
+                        .fill(on ? Theme.ink.opacity(0.3 + 0.7 * Double(i + 1) / Double(half)) : Theme.track)
+                        .frame(maxWidth: .infinity).frame(height: 9)
                 }
             }
-            .frame(height: 16)
+            .frame(height: 10)
             ends
         }
     }
