@@ -64,7 +64,8 @@ final class PlusStore: ObservableObject {
             if case .verified(let t) = result, t.productID == Self.productID, t.revocationDate == nil { active = true }
         }
         let d = UserDefaults.standard
-        if active {
+        // a TestFlight "Lock again" ignores the sandbox subscription until the next purchase
+        if active, d.string(forKey: Plus.sourceKey) != "reset" {
             if !d.bool(forKey: Plus.key) { d.set(Date.now.timeIntervalSince1970, forKey: Plus.sinceKey) }
             d.set(true, forKey: Plus.key)
             d.set("store", forKey: Plus.sourceKey)

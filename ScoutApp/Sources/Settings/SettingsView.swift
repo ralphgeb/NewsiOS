@@ -196,6 +196,17 @@ struct SettingsView: View {
                     Spacer()
                     Text(sinceText).foregroundStyle(Theme.secondary)
                 }
+                // for filming the purchase again: TestFlight builds only, and only until the next purchase
+                if Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" {
+                    Button("Lock again (TestFlight only)", role: .destructive) {
+                        withAnimation(.snappy) {
+                            hasPlus = false
+                            plusSource = "reset"
+                        }
+                        if UIApplication.shared.alternateIconName != nil { UIApplication.shared.setAlternateIconName(nil) }
+                    }
+                    .foregroundStyle(.red)
+                }
                 if plusSource == "store" {
                     Button("Manage subscription") {
                         Task {
