@@ -5,6 +5,8 @@ import SwiftUI
 struct OnboardingView: View {
     @EnvironmentObject private var weather: WeatherModel
     @EnvironmentObject private var store: NewsStore
+    @EnvironmentObject private var look: AppearanceStore
+    @Environment(\.colorScheme) private var scheme
     var finish: () -> Void
     @State private var page = 0
     @State private var nextReady = false
@@ -16,7 +18,8 @@ struct OnboardingView: View {
                 welcome.tag(0)
                 howItWorks.tag(1)
                 topics.tag(2)
-                location.tag(3)
+                style.tag(3)
+                location.tag(4)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .animation(.smooth, value: page)
@@ -24,23 +27,23 @@ struct OnboardingView: View {
             // dots on the left say there's more to swipe; the next step sits small on the right
             HStack(alignment: .center) {
                 HStack(spacing: 6) {
-                    ForEach(0..<4) { i in
+                    ForEach(0..<5) { i in
                         Capsule()
                             .fill(i == page ? Theme.ink : Theme.ink.opacity(0.18))
                             .frame(width: i == page ? 16 : 6, height: 6)
                     }
                 }
                 .animation(.snappy, value: page)
-                .accessibilityLabel("Page \(page + 1) of 4")
+                .accessibilityLabel("Page \(page + 1) of 5")
                 Spacer()
-                if page == 3 {
+                if page == 4 {
                     Button("Not now") { done() }
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Theme.secondary)
                         .padding(.trailing, 14)
                 }
                 Button {
-                    if page < 3 {
+                    if page < 4 {
                         page += 1
                     } else {
                         weather.requestPermission()
@@ -48,7 +51,7 @@ struct OnboardingView: View {
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Text(page < 3 ? "Next" : "Allow location")
+                        Text(page < 4 ? "Next" : "Allow location")
                         Image(systemName: "arrow.right").font(.system(size: 13, weight: .semibold))
                     }
                     .font(.system(size: 15, weight: .semibold))
@@ -149,6 +152,74 @@ struct OnboardingView: View {
             Spacer()
         }
         .padding(.horizontal, 32)
+    }
+
+    /// Pick your look, as in Halo: the one you choose is yours to keep; the others come with
+    /// Scout Plus. A little Scout card shows it.
+    private var style: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Pick your look")
+                    .font(.system(size: 26, weight: .semibold)).tracking(-0.3).foregroundStyle(Theme.text)
+                Text("Tap one to try it. The one you pick is yours to keep; the others come with Scout Plus.")
+                    .font(.system(size: 15)).foregroundStyle(Theme.text.opacity(0.65))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            // a little Today, drawn in the colours on show
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Circle().fill(Theme.accent).frame(width: 7, height: 7)
+                    Text("Top stories").scoutLabel()
+                }
+                Text("Markets rally as central banks signal a pause")
+                    .font(Theme.headline(18, weight: .bold)).foregroundStyle(Theme.text)
+                Text("Reuters · 2h ago").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
+                HStack(spacing: 3) {
+                    ForEach(0..<16, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(i >= 9 && i < 14 ? Theme.ink.opacity(0.3 + 0.14 * Double(i - 8)) : Theme.track)
+                            .frame(maxWidth: .infinity).frame(height: 8)
+                    }
+                }
+            }
+            .padding(16)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .padding(12)
+            .background(Theme.background, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Theme.hairline, lineWidth: 1))
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 14) {
+                ForEach(Preset.all) { p in
+                    let on = look.appearance.presetID == p.id
+                    Button { look.chooseFree(p) } label: {
+                        VStack(spacing: 6) {
+                            ZStack {
+                                Circle().fill((scheme == .dark ? p.dark : p.light).background.color)
+                                Circle().inset(by: 8).trim(from: 0, to: 0.72)
+                                    .stroke((scheme == .dark ? p.dark : p.light).ink.color, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                                    .rotationEffect(.degrees(-90))
+                                Circle().fill(p.accent.color).frame(width: 9, height: 9)
+                            }
+                            .frame(width: 52, height: 52)
+                            .overlay(Circle().stroke(on ? Theme.accent : Theme.hairline, lineWidth: on ? 2.5 : 1).padding(-3))
+                            Text(p.name).font(.system(size: 12, weight: on ? .semibold : .medium))
+                                .foregroundStyle(on ? Theme.text : Theme.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(p.name) colours")
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+            Picker("Mode", selection: $look.appearance.mode) {
+                ForEach(AppearanceMode.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 24)
+        .sensoryFeedback(.selection, trigger: look.appearance.presetID)
     }
 
     private var location: some View {

@@ -5,6 +5,9 @@ import SwiftUI
 /// look presets (for a minute) are free; the rest is locked. Bought through the App Store.
 enum Plus {
     static let key = "plus.active"
+    /// The look picked while setting up: yours without Scout Plus (as in Halo).
+    static let freeStyleKey = "plus.freeStyle"
+    static var freeStyle: String { UserDefaults.standard.string(forKey: freeStyleKey) ?? "scout" }
     static let sinceKey = "plus.since"
     /// "store" once bought through the App Store.
     static let sourceKey = "plus.source"
@@ -64,8 +67,7 @@ final class PlusStore: ObservableObject {
             if case .verified(let t) = result, t.productID == Self.productID, t.revocationDate == nil { active = true }
         }
         let d = UserDefaults.standard
-        // a TestFlight "Lock again" ignores the sandbox subscription until the next purchase
-        if active, d.string(forKey: Plus.sourceKey) != "reset" {
+        if active {
             if !d.bool(forKey: Plus.key) { d.set(Date.now.timeIntervalSince1970, forKey: Plus.sinceKey) }
             d.set(true, forKey: Plus.key)
             d.set("store", forKey: Plus.sourceKey)
@@ -95,10 +97,6 @@ final class PlusStore: ObservableObject {
     }
 }
 
-enum Paywall {
-    /// Stories open before the first big picture card in each News list.
-    static let freeStories = 8
-}
 
 /// A light veil over a whole card, so the text and pictures still show through, with one lock in
 /// the middle; tapping it opens Scout Plus.

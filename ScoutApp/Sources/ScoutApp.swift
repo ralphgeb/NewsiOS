@@ -137,12 +137,14 @@ struct RootView: View {
                 .environmentObject(tube)
         }
         .onOpenURL { url in
-            // Widget taps open a page: scout://today, scout://news, scout://stocks, scout://history.
-            // Settings closes and the page goes back to its top, wherever you'd left it.
+            // Widget taps open a page: scout://today, scout://news?section=Tech, scout://story/<id>,
+            // scout://stocks, scout://history. Settings closes and the page starts from its top
+            // (or the story), wherever you'd left it.
             showSettings = false
-            NotificationCenter.default.post(name: .scoutShowPage, object: url.host ?? "today")
+            DeepLink.pending = url          // for a page that isn't on screen yet (a cold start)
+            NotificationCenter.default.post(name: .scoutShowPage, object: url)
             switch url.host {
-            case "news": tab = 1
+            case "news", "story": tab = 1
             case "stocks": tab = 2
             case "history", "saved": tab = 3
             default: tab = 0
@@ -154,4 +156,10 @@ struct RootView: View {
 extension Notification.Name {
     /// A widget was tapped: the named page shows its top (story pages close).
     static let scoutShowPage = Notification.Name("scoutShowPage")
+}
+
+/// The last widget link, kept until the page it's for has opened it.
+@MainActor
+enum DeepLink {
+    static var pending: URL?
 }

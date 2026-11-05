@@ -50,7 +50,7 @@ struct TodayView: View {
         .onChange(of: store.topic) { _, _ in editionID = nil }
         // a widget tap shows Today from the top, closing any story you'd opened
         .onReceive(NotificationCenter.default.publisher(for: .scoutShowPage)) { note in
-            if note.object as? String == "today" { path = NavigationPath(); editing = false }
+            if let url = note.object as? URL, url.host == nil || url.host == "today" { path = NavigationPath(); editing = false }
         }
         .onChange(of: editing) { _, on in if !on { dragging = nil; dragOffset = 0 } }
         .sheet(isPresented: $showTopics) { TopicsSheet().environmentObject(store).presentationDetents([.large]) }

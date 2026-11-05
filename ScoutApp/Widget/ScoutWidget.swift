@@ -16,42 +16,42 @@ struct BriefingEntry: TimelineEntry {
     var appearance: Appearance = Appearance.load()
 }
 
-struct BriefingProvider: TimelineProvider {
+struct BriefingProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> BriefingEntry {
         BriefingEntry(date: .now, digest: .sample)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (BriefingEntry) -> Void) {
+    func snapshot(for config: BriefingConfig, in context: Context) async -> BriefingEntry {
         Appearance.current = Appearance.load()
-        completion(BriefingEntry(date: .now, digest: context.isPreview ? .sample : (cachedDigest() ?? .sample)))
+        return BriefingEntry(date: .now, digest: context.isPreview ? .sample : (cachedDigest(config.section.topic) ?? .sample))
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<BriefingEntry>) -> Void) {
+    /// The widget fetches the briefing itself, so it updates even when Scout isn't opened.
+    func timeline(for config: BriefingConfig, in context: Context) async -> Timeline<BriefingEntry> {
         Appearance.current = Appearance.load()
-        // The widget fetches the briefing itself, so it updates even when Scout isn't opened.
-        Task {
-            var digest = cachedDigest()
-            if let data = try? await Feed.fetchFresh(Feed.briefing), let b = Feed.decodeBriefing(data) {
-                digest = BriefingDigest(briefing: b, topic: Shared.topic) ?? digest
-            }
-            let entry = BriefingEntry(date: .now, digest: digest ?? .sample)
-            completion(Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(60 * 60))))
+        let topic = config.section.topic
+        var digest = cachedDigest(topic)
+        if let data = try? await Feed.fetchFresh(Feed.briefing), let b = Feed.decodeBriefing(data) {
+            digest = BriefingDigest(briefing: b, topic: topic) ?? digest
         }
+        let entry = BriefingEntry(date: .now, digest: digest ?? .sample)
+        return Timeline(entries: [entry], policy: .after(.now.addingTimeInterval(60 * 60)))
     }
 
-    private func cachedDigest() -> BriefingDigest? {
-        Feed.cached(Feed.briefing).flatMap(Feed.decodeBriefing).flatMap { BriefingDigest(briefing: $0, topic: Shared.topic) }
+    private func cachedDigest(_ topic: Topic) -> BriefingDigest? {
+        Feed.cached(Feed.briefing).flatMap(Feed.decodeBriefing).flatMap { BriefingDigest(briefing: $0, topic: topic) }
     }
 }
 
 struct BriefingWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: Shared.widgetKind, provider: BriefingProvider()) { entry in
+        AppIntentConfiguration(kind: Shared.widgetKind, intent: BriefingConfig.self, provider: BriefingProvider()) { entry in
             BriefingWidgetView(entry: entry)
-                .widgetURL(URL(string: "scout://today"))
+                // that section's page in News, from the top
+                .widgetURL(URL(string: "scout://news?section=\(entry.digest.topic.rawValue)"))
         }
         .configurationDisplayName("Briefing")
-        .description("Your Today briefing's headline and top stories.")
+        .description("A section's briefing: its headline and top stories. Touch and hold, then Edit Widget, to pick the section.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryRectangular, .accessoryInline])
     }
 }

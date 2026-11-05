@@ -19,8 +19,10 @@ struct NewsView: View {
         Binding(get: { section }, set: { go(to: $0) })
     }
 
+    @State private var path = NavigationPath()
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScoutPage(showSettings: $showSettings, title: "News", subtitle: subtitle, pinnedHeight: 50,
                       onRefresh: { await store.refresh() }, isRefreshing: store.isLoading,
                       pageKey: section.rawValue) {
@@ -35,11 +37,35 @@ struct NewsView: View {
             }
             .simultaneousGesture(swipe)
             .storyDestinations()
+            // from a widget: a section from its top, or one story
+            .onReceive(NotificationCenter.default.publisher(for: .scoutShowPage)) { note in
+                if let url = note.object as? URL { open(url) }
+            }
+            .onAppear { if let url = DeepLink.pending { open(url) } }
         }
         .sheet(isPresented: $showInterests) {
             TopicsSheet()
                 .environmentObject(store)
                 .presentationDetents([.large])
+        }
+    }
+
+    /// A widget link: a section from its top, or one story.
+    private func open(_ url: URL) {
+        guard url.host == "news" || url.host == "story" else { return }
+        DeepLink.pending = nil
+        if url.host == "news" {
+            path = NavigationPath()
+            let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "section" }?.value
+            if let name, let section = NewsSection.allCases.first(where: { $0.rawValue == name }) {
+                sectionRaw = section.rawValue
+            }
+        } else if url.host == "story" {
+            let id = url.lastPathComponent
+            guard store.story(id) != nil else { return }
+            path = NavigationPath()
+            path.append(StoryRoute(id: id, sequence: [id]))
         }
     }
 

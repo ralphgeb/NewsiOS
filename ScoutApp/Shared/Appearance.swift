@@ -93,6 +93,8 @@ struct Preset: Identifiable, Hashable {
     let light: PaletteColors
     let dark: PaletteColors
     let accent: RGBA
+    /// Made for light mode: choosing it switches Scout to Light (as in Halo).
+    var prefersLight = false
 
     static let all: [Preset] = [
         // Scout's own look, from the app icon: navy ink and the icon's red. What Reset goes back to.
@@ -109,6 +111,15 @@ struct Preset: Identifiable, Hashable {
                light: .init(ink: .init(hex: 0x0E2A47), background: .init(hex: 0xF4F7FA), card: .init(hex: 0xFFFFFF)),
                dark: .init(ink: .init(hex: 0xE4EEF7), background: .init(hex: 0x07111C), card: .init(hex: 0x0F1C2B)),
                accent: .init(hex: 0x1FC8B4)),
+        // Soft and light, as in Halo: a pale sky blue and a blush pink. Both open in Light.
+        Preset(id: "sky", name: "Sky",
+               light: .init(ink: .init(hex: 0x33557A), background: .init(hex: 0xEEF6FD), card: .init(hex: 0xFFFFFF)),
+               dark: .init(ink: .init(hex: 0xDCEBFA), background: .init(hex: 0x0A1320), card: .init(hex: 0x13203A)),
+               accent: .init(hex: 0x6FB6F2), prefersLight: true),
+        Preset(id: "blush", name: "Blush",
+               light: .init(ink: .init(hex: 0x6B3A50), background: .init(hex: 0xFDF2F6), card: .init(hex: 0xFFFFFF)),
+               dark: .init(ink: .init(hex: 0xF9E4EC), background: .init(hex: 0x170C11), card: .init(hex: 0x25161D)),
+               accent: .init(hex: 0xF08BB0), prefersLight: true),
         Preset(id: "forest", name: "Forest",
                light: .init(ink: .init(hex: 0x1C3324), background: .init(hex: 0xF5F7F3), card: .init(hex: 0xFFFFFF)),
                dark: .init(ink: .init(hex: 0xE5EFE6), background: .init(hex: 0x08100B), card: .init(hex: 0x111C15)),

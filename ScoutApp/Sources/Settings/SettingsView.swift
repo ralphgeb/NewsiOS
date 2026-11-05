@@ -20,13 +20,13 @@ final class AppearanceStore: ObservableObject {
 
     init() { appearance = Appearance.current }
 
-    /// A look from the row of presets. Without Scout Plus it's a preview: after a minute the
-    /// colors fade back to Scout's own.
+    /// A look from the row of presets. The light looks switch to Light. Without Scout Plus, any but
+    /// your free one is a preview: after a minute the colors fade back.
     func apply(_ preset: Preset) {
         var a = Appearance(preset: preset, numberStyle: appearance.numberStyle)
         a.sameInBoth = appearance.sameInBoth
-        a.mode = appearance.mode
-        if Plus.isActive {
+        a.mode = preset.prefersLight ? .light : appearance.mode
+        if Plus.isActive || preset.id == Plus.freeStyle {
             Self.crossfade {
                 previewing = false
                 appearance = a
@@ -43,6 +43,12 @@ final class AppearanceStore: ObservableObject {
             guard !Task.isCancelled else { return }
             self?.endPreview()
         }
+    }
+
+    /// The welcome's style page: this look becomes the free one, and is applied.
+    func chooseFree(_ preset: Preset) {
+        UserDefaults.standard.set(preset.id, forKey: Plus.freeStyleKey)
+        apply(preset)
     }
 
     /// Back to the saved look, gently.
@@ -92,8 +98,10 @@ final class AppearanceStore: ObservableObject {
 
     /// Back to the original colors and type; light or dark stays as you set it.
     func reset() {
-        var a = Appearance.standard
-        a.mode = appearance.mode
+        // back to Scout's own colours, or without Plus to your free look
+        let base = Plus.isActive ? Preset.all[0] : (Preset.all.first { $0.id == Plus.freeStyle } ?? Preset.all[0])
+        var a = Appearance(preset: base, numberStyle: Appearance.standard.numberStyle)
+        a.mode = base.prefersLight ? .light : appearance.mode
         previewEnds?.cancel()
         Self.crossfade {
             previewing = false
@@ -120,6 +128,7 @@ struct SettingsView: View {
     @AppStorage(Plus.key) private var hasPlus = false
     @AppStorage(Plus.sinceKey) private var since = 0.0
     @AppStorage(Plus.sourceKey) private var plusSource = ""
+    @AppStorage(Plus.freeStyleKey) private var freeStyle = "scout"
     @State private var showPlus = false
     @State private var previewNote = false
     @State private var currentIcon: String?
@@ -196,17 +205,6 @@ struct SettingsView: View {
                     Spacer()
                     Text(sinceText).foregroundStyle(Theme.secondary)
                 }
-                // for filming the purchase again: TestFlight builds only, and only until the next purchase
-                if Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" {
-                    Button("Lock again (TestFlight only)", role: .destructive) {
-                        withAnimation(.snappy) {
-                            hasPlus = false
-                            plusSource = "reset"
-                        }
-                        if UIApplication.shared.alternateIconName != nil { UIApplication.shared.setAlternateIconName(nil) }
-                    }
-                    .foregroundStyle(.red)
-                }
                 if plusSource == "store" {
                     Button("Manage subscription") {
                         Task {
@@ -254,7 +252,7 @@ struct SettingsView: View {
             }
             RegionChips()
                 .padding(.vertical, 6)
-            Picker("Widget briefing", selection: $store.topic) {
+            Picker("Notification briefing", selection: $store.topic) {
                 ForEach(Topic.allCases) { Text($0.title).tag($0) }
             }
             Button {
@@ -293,7 +291,7 @@ struct SettingsView: View {
                     ForEach(Preset.all) { p in
                         Button {
                             look.apply(p)
-                            if !hasPlus { withAnimation(.snappy) { previewNote = true } }
+                            if !hasPlus && p.id != freeStyle { withAnimation(.snappy) { previewNote = true } }
                         } label: {
                             VStack(spacing: 6) {
                                 ZStack {
@@ -306,6 +304,16 @@ struct SettingsView: View {
                                 .frame(width: 52, height: 52)
                                 .overlay(Circle().stroke(look.appearance.presetID == p.id ? Theme.accent : Theme.hairline,
                                                          lineWidth: look.appearance.presetID == p.id ? 2 : 1))
+                                // your free look is yours; the others come with Scout Plus (a try lasts a minute)
+                                .overlay(alignment: .bottomTrailing) {
+                                    if !hasPlus && p.id != freeStyle {
+                                        Image(systemName: "lock.fill")
+                                            .font(.system(size: 9, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .padding(4)
+                                            .background(.black.opacity(0.45), in: Circle())
+                                    }
+                                }
                                 Text(p.name).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.secondary)
                             }
                         }
@@ -360,7 +368,7 @@ struct SettingsView: View {
         } header: {
             Text("Appearance")
         } footer: {
-            if !hasPlus { Text("Try any look for \(AppearanceStore.previewSeconds) seconds; Scout Plus keeps it.") }
+            if !hasPlus { Text("Your look is free. Try the others for a minute; Scout Plus keeps them.") }
         }
         .listRowBackground(Theme.card)
     }
@@ -664,5 +672,5 @@ private struct PreviewNote: View {
 enum AppIcons {
     struct Icon { let name: String; let alternate: String?; var preview: String { "IconPreview-\(name)" } }
     static let all: [Icon] = [Icon(name: "Scout", alternate: nil)] +
-        ["Graphite", "Greyscale", "Ocean", "Forest", "Mono", "Dusk", "Sand"].map { Icon(name: $0, alternate: "AppIcon-\($0)") }
+        ["Graphite", "Greyscale", "Ocean", "Sky", "Blush", "Forest", "Mono", "Dusk", "Sand"].map { Icon(name: $0, alternate: "AppIcon-\($0)") }
 }
