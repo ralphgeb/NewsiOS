@@ -216,7 +216,7 @@ struct SectionCover: View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
                 NavigationLink(value: lead.map { StoryRoute(id: $0.id, sequence: sequence) }) {
-                    StoryImage(story: lead, fade: true).frame(height: Design.briefingImage)
+                    StoryImage(story: lead).frame(height: Design.briefingImage)
                 }
                 .buttonStyle(PressStyle())
                 .disabled(lead == nil)

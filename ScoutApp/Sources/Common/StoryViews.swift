@@ -108,8 +108,6 @@ struct RemoteImage<Placeholder: View>: View {
 /// A story's picture, or a quiet box with the outlet's name when it has none.
 struct StoryImage: View {
     let story: Story?
-    /// Fades the bottom of the picture into the card's colour, so the headline below sits in it.
-    var fade = false
 
     var body: some View {
         Color.clear
@@ -128,15 +126,6 @@ struct StoryImage: View {
                         }
                         .foregroundStyle(Theme.tertiary)
                     }
-                }
-            }
-            .overlay {
-                if fade && Design.bold {
-                    LinearGradient(stops: [.init(color: Theme.card.opacity(0), location: 0.45),
-                                           .init(color: Theme.card.opacity(0.75), location: 0.8),
-                                           .init(color: Theme.card, location: 1)],
-                                   startPoint: .top, endPoint: .bottom)
-                        .allowsHitTesting(false)
                 }
             }
             .clipped()
@@ -210,6 +199,8 @@ struct SectionHead: View {
     var detail: String? = nil
     /// A line under the title, on the left ("US, by market value").
     var subtitle: String? = nil
+    /// Space above the title.
+    var top: CGFloat = 14
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -230,7 +221,7 @@ struct SectionHead: View {
             }
         }
         .padding(.horizontal, 2)
-        .padding(.top, 14)
+        .padding(.top, top)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
@@ -244,7 +235,7 @@ struct HeroCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            StoryImage(story: story, fade: true)
+            StoryImage(story: story)
                 .frame(height: Design.heroImage)
             VStack(alignment: .leading, spacing: 8) {
                 SourceLine(story: story)
@@ -264,7 +255,6 @@ struct HeroCard: View {
                 }
             }
             .padding(16)
-            .padding(.top, -Design.fadeOverlap)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card)

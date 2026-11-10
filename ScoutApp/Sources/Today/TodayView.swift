@@ -465,7 +465,7 @@ struct NumberedHero: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            StoryImage(story: story, fade: true)
+            StoryImage(story: story)
                 .frame(height: Design.topImage)
                 .overlay(alignment: .topLeading) {
                     Text("\(number)")
@@ -487,7 +487,6 @@ struct NumberedHero: View {
                 TickerChips(story: story, limit: 4)
             }
             .padding(16)
-            .padding(.top, -Design.fadeOverlap)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card)

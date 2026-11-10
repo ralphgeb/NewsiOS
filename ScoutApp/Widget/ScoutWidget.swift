@@ -4,9 +4,9 @@ import WidgetKit
 @main
 struct ScoutWidgets: WidgetBundle {
     var body: some Widget {
+        ListenWidget()
         BriefingWidget()
         HeadlinesWidget()
-        ListenWidget()
     }
 }
 

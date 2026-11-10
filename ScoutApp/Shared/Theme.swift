@@ -101,15 +101,13 @@ enum Design {
     /// Space between the cards and the screen's edges (was 20; half that).
     static var sideMargin: CGFloat { bold ? 10 : 20 }
     /// The square picture beside a story in a list.
-    static var thumbnail: CGFloat { bold ? 116 : 86 }
+    static var thumbnail: CGFloat { bold ? 124 : 86 }
     /// The picture on a big story card.
-    static var heroImage: CGFloat { bold ? 300 : 200 }
+    static var heroImage: CGFloat { bold ? 340 : 200 }
     /// The pictures on Today's top stories.
-    static var topImage: CGFloat { bold ? 290 : 180 }
+    static var topImage: CGFloat { bold ? 330 : 180 }
     /// The picture over a section's briefing.
-    static var briefingImage: CGFloat { bold ? 310 : 190 }
-    /// How far the headline reaches up into a big picture's fade.
-    static var fadeOverlap: CGFloat { bold ? 34 : 0 }
+    static var briefingImage: CGFloat { bold ? 350 : 190 }
 
     static func heavier(_ w: Font.Weight) -> Font.Weight {
         switch w {

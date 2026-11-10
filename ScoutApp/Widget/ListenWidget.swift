@@ -65,7 +65,7 @@ struct ListenProvider: AppIntentTimelineProvider {
         for t in Topic.allCases {
             guard let b = briefing?.section(t) else { continue }
             titles[t.rawValue] = b.title
-            summaries[t.rawValue] = Self.sentences(b.summary ?? "", 3)
+            summaries[t.rawValue] = Self.sentences(b.summary ?? "", 4)
         }
         // the section the arrows chose, else the one picked in Edit Widget
         let topic = Shared.defaults.string(forKey: ListenStepIntent.key).flatMap(Topic.init(rawValue:)) ?? config.section.topic
@@ -141,10 +141,8 @@ struct ListenWidgetView: View {
     private func arrow(_ step: Int) -> some View {
         Button(intent: ListenStepIntent(step: step)) {
             Image(systemName: step < 0 ? "chevron.up" : "chevron.down")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(text.opacity(0.8))
-                .frame(width: 36, height: 36)
-                .background(text.opacity(0.08), in: Circle())
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(text.opacity(0.75))
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
@@ -190,17 +188,18 @@ struct ListenWidgetView: View {
     }
 
     private var medium: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     label
                     Text("· \(topic.title)").font(.system(size: 10, weight: .semibold)).tracking(1).textCase(.uppercase)
                         .foregroundStyle(text.opacity(0.5))
                 }
                 Text(entry.titles[topic.rawValue] ?? "Your \(topic.title) briefing")
-                    .font(Theme.headline(15, weight: .bold)).foregroundStyle(text).lineLimit(2)
+                    .font(Theme.headline(14.5, weight: .bold)).foregroundStyle(text).lineLimit(2)
                 Text(entry.summaries[topic.rawValue] ?? "Briefings arrive by 6:00 each morning.")
-                    .font(.system(size: 11.5)).foregroundStyle(text.opacity(0.65)).lineLimit(5)
+                    .font(.system(size: 11)).lineSpacing(1.5).foregroundStyle(text.opacity(0.68))
+                    .lineLimit(6).truncationMode(.tail)
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
