@@ -10,7 +10,7 @@ struct TodayView: View {
     @State private var showTopics = false
 
     // Edit mode, as in Halo: drag cards to reorder them, minus to hide one, plus to bring it back.
-    @AppStorage("today.cards.v3") private var orderRaw = ""   // v3: markets moved under top stories
+    @AppStorage("today.cards.v4") private var orderRaw = ""   // v4: companies to watch moved to the bottom
     @AppStorage("today.hidden") private var hiddenRaw = ""
     @State private var editing = false
     @State private var dragging: TodayCard?
@@ -307,7 +307,7 @@ struct CardHeightsKey: PreferenceKey {
 
 /// The cards on Today, in their default order.
 enum TodayCard: String, CaseIterable, Identifiable {
-    case weather, tube, top, markets, movers, brief, more
+    case weather, tube, top, markets, brief, more, movers
 
     var id: String { rawValue }
 
@@ -465,7 +465,7 @@ struct NumberedHero: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            StoryImage(story: story)
+            StoryImage(story: story, fade: true)
                 .frame(height: Design.topImage)
                 .overlay(alignment: .topLeading) {
                     Text("\(number)")
@@ -479,7 +479,6 @@ struct NumberedHero: View {
                 HStack(spacing: 6) {
                     SourceLine(story: story)
                     Text("· \(Format.ago(story.published))").font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
-                    StatusPill(story: story)
                 }
                 Text(title).font(Theme.headline(19)).foregroundStyle(Theme.text).fixedSize(horizontal: false, vertical: true)
                 if let text, !text.isEmpty {
@@ -488,6 +487,7 @@ struct NumberedHero: View {
                 TickerChips(story: story, limit: 4)
             }
             .padding(16)
+            .padding(.top, -Design.fadeOverlap)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card)
@@ -588,10 +588,31 @@ struct MoreCard: View {
     @AppStorage(Plus.key) private var hasPlus = false
     private var paywall: Bool { !hasPlus }
 
+    /// Small cards of a few stories each, with one big picture story halfway down.
+    private var groups: (before: [[Story]], hero: Story?, after: [[Story]]) {
+        let mid = stories.count / 2
+        let heroIndex = stories.count >= 6 ? (stories.indices.dropFirst(mid).first { stories[$0].imageURL != nil } ?? mid) : nil
+        let hero = heroIndex.map { stories[$0] }
+        let rest = stories.filter { $0.id != hero?.id }
+        let split = heroIndex.map { min($0, rest.count) } ?? rest.count
+        func chunks(_ list: ArraySlice<Story>) -> [[Story]] {
+            stride(from: list.startIndex, to: list.endIndex, by: 4).map { Array(list[$0..<min($0 + 4, list.endIndex)]) }
+        }
+        return (chunks(rest[..<split]), hero, chunks(rest[split...]))
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let g = groups
+        VStack(alignment: .leading, spacing: 12) {
             SectionHead(title: title, detail: "\(stories.count)")
-            StoryList(stories: stories, sequence: sequence, locked: paywall)
+            ForEach(g.before, id: \.first?.id) { StoryList(stories: $0, sequence: sequence, locked: paywall) }
+            if let hero = g.hero {
+                NavigationLink(value: StoryRoute(id: hero.id, sequence: sequence)) { HeroCard(story: hero) }
+                    .buttonStyle(PressStyle())
+                    .locked(paywall)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+            ForEach(g.after, id: \.first?.id) { StoryList(stories: $0, sequence: sequence, locked: paywall) }
         }
     }
 }

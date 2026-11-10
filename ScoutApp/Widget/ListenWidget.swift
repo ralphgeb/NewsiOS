@@ -10,19 +10,42 @@ struct ListenConfig: WidgetConfigurationIntent {
     var section: BriefingSection
 }
 
+/// The up and down arrows: move the widget to the next or previous section's briefing.
+struct ListenStepIntent: AppIntent {
+    static var title: LocalizedStringResource = "Next briefing"
+    static var isDiscoverable = false
+    static let key = "listen.widget.topic"
+
+    @Parameter(title: "Step") var step: Int
+
+    init() {}
+    init(step: Int) { self.step = step }
+
+    func perform() async throws -> some IntentResult {
+        let all = Topic.allCases
+        let now = Shared.defaults.string(forKey: Self.key).flatMap(Topic.init(rawValue:)) ?? .tech
+        let i = all.firstIndex(of: now) ?? 0
+        Shared.defaults.set(all[(i + step + all.count) % all.count].rawValue, forKey: Self.key)
+        return .result()
+    }
+}
+
 struct ListenEntry: TimelineEntry {
     let date: Date
-    let section: BriefingSection
+    /// The section shown now (the arrows move it).
+    let topic: Topic
     /// The section playing in Scout right now (shows pause on its button).
     var nowPlaying: String? = ListenState.paused ? nil : ListenState.section
     /// Each section's briefing headline.
     let titles: [String: String]
+    /// Each section's briefing in three sentences.
+    var summaries: [String: String] = [:]
     var appearance: Appearance = Appearance.load()
 }
 
 struct ListenProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> ListenEntry {
-        ListenEntry(date: .now, section: .tech, titles: [:])
+        ListenEntry(date: .now, topic: .tech, titles: [:])
     }
 
     func snapshot(for config: ListenConfig, in context: Context) async -> ListenEntry {
@@ -38,9 +61,26 @@ struct ListenProvider: AppIntentTimelineProvider {
     }
 
     private func entry(_ config: ListenConfig, _ briefing: Briefing?) -> ListenEntry {
-        var titles: [String: String] = [:]
-        for t in Topic.allCases { titles[t.rawValue] = briefing?.section(t)?.title }
-        return ListenEntry(date: .now, section: config.section, titles: titles)
+        var titles: [String: String] = [:], summaries: [String: String] = [:]
+        for t in Topic.allCases {
+            guard let b = briefing?.section(t) else { continue }
+            titles[t.rawValue] = b.title
+            summaries[t.rawValue] = Self.sentences(b.summary ?? "", 3)
+        }
+        // the section the arrows chose, else the one picked in Edit Widget
+        let topic = Shared.defaults.string(forKey: ListenStepIntent.key).flatMap(Topic.init(rawValue:)) ?? config.section.topic
+        return ListenEntry(date: .now, topic: topic, titles: titles, summaries: summaries)
+    }
+
+    /// The first `n` sentences of a briefing's summary.
+    static func sentences(_ text: String, _ n: Int) -> String {
+        let flat = text.replacingOccurrences(of: "\n", with: " ")
+        var out: [String] = []
+        flat.enumerateSubstrings(in: flat.startIndex..., options: .bySentences) { sub, _, _, stop in
+            if let sub { out.append(sub.trimmingCharacters(in: .whitespaces)) }
+            if out.count >= n { stop = true }
+        }
+        return out.joined(separator: " ")
     }
 }
 
@@ -50,7 +90,7 @@ struct ListenWidget: Widget {
             ListenWidgetView(entry: entry)
         }
         .configurationDisplayName("Listen")
-        .description("Play a briefing without opening Scout. Small: one section. Medium: all four.")
+        .description("Play a briefing without opening Scout. Use the arrows to move between Tech, Finance, World and Fashion.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -62,8 +102,8 @@ struct ListenWidgetView: View {
 
     private var palette: PaletteColors { entry.appearance.colors(for: scheme == .dark ? .dark : .light) }
     private var text: Color { palette.textColor.color }
-    private var ink: Color { palette.ink.color }
     private var accent: Color { entry.appearance.accent.color }
+    private var topic: Topic { entry.topic }
 
     var body: some View {
         Group {
@@ -71,18 +111,18 @@ struct ListenWidgetView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .containerBackground(for: .widget) { palette.background.color }
-        .widgetURL(URL(string: "scout://news?section=\(entry.section.topic.rawValue)"))
+        .widgetURL(URL(string: "scout://news?section=\(topic.rawValue)"))
     }
 
     private var label: some View {
         HStack(spacing: 6) {
-            Circle().fill(accent).frame(width: 6, height: 6)
+            Image(systemName: "headphones").font(.system(size: 9, weight: .bold)).foregroundStyle(accent)
             Text("Listen").font(.system(size: 10, weight: .semibold)).tracking(1).textCase(.uppercase)
                 .foregroundStyle(text.opacity(0.5))
         }
     }
 
-    private func play(_ topic: Topic, size: CGFloat) -> some View {
+    private func play(size: CGFloat) -> some View {
         let on = entry.nowPlaying == topic.rawValue
         return Button(intent: PlayBriefingIntent(section: topic.rawValue, voice: "chirp")) {
             Image(systemName: on ? "pause.fill" : "play.fill")
@@ -94,36 +134,84 @@ struct ListenWidgetView: View {
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(on ? "Pause the \(topic.title) briefing" : "Play the \(topic.title) briefing")
+    }
+
+    /// An up or down arrow with a big target, so it's easy to press.
+    private func arrow(_ step: Int) -> some View {
+        Button(intent: ListenStepIntent(step: step)) {
+            Image(systemName: step < 0 ? "chevron.up" : "chevron.down")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(text.opacity(0.8))
+                .frame(width: 36, height: 36)
+                .background(text.opacity(0.08), in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(step < 0 ? "Previous briefing" : "Next briefing")
+    }
+
+    /// Four dots, one filled for the section shown.
+    private var dots: some View {
+        VStack(spacing: 4) {
+            ForEach(Topic.allCases) { t in
+                Circle().fill(t == topic ? accent : text.opacity(0.2)).frame(width: 5, height: 5)
+            }
+        }
+    }
+
+    private var arrows: some View {
+        VStack(spacing: 0) {
+            arrow(-1)
+            Spacer(minLength: 4)
+            dots
+            Spacer(minLength: 4)
+            arrow(1)
+        }
+        .frame(width: 44)
+        .padding(.vertical, -6)
+        .padding(.trailing, -6)
     }
 
     private var small: some View {
-        let topic = entry.section.topic
-        return VStack(alignment: .leading, spacing: 6) {
-            label
-            Text(topic.title).font(Theme.headline(17, weight: .bold)).foregroundStyle(text)
-            Text(entry.titles[topic.rawValue] ?? "Your briefing arrives by 6:00")
-                .font(.system(size: 11.5)).foregroundStyle(text.opacity(0.6)).lineLimit(3)
+        HStack(alignment: .top, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
+                label
+                Text(topic.title).font(Theme.headline(17, weight: .bold)).foregroundStyle(text)
+                Text(entry.titles[topic.rawValue] ?? "Your briefing arrives by 6:00")
+                    .font(.system(size: 11.5)).foregroundStyle(text.opacity(0.6)).lineLimit(3)
+                Spacer(minLength: 0)
+                play(size: 44)
+            }
             Spacer(minLength: 0)
-            play(topic, size: 40)
+            arrows
         }
     }
 
     private var medium: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            label
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(Topic.allCases) { t in
-                    HStack(spacing: 8) {
-                        play(t, size: 30)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(t.title).font(.system(size: 13, weight: .bold)).foregroundStyle(text)
-                            Text(entry.titles[t.rawValue] ?? "By 6:00").font(.system(size: 10)).foregroundStyle(text.opacity(0.55)).lineLimit(2)
-                        }
-                        Spacer(minLength: 0)
-                    }
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    label
+                    Text("· \(topic.title)").font(.system(size: 10, weight: .semibold)).tracking(1).textCase(.uppercase)
+                        .foregroundStyle(text.opacity(0.5))
                 }
+                Text(entry.titles[topic.rawValue] ?? "Your \(topic.title) briefing")
+                    .font(Theme.headline(15, weight: .bold)).foregroundStyle(text).lineLimit(2)
+                Text(entry.summaries[topic.rawValue] ?? "Briefings arrive by 6:00 each morning.")
+                    .font(.system(size: 11.5)).foregroundStyle(text.opacity(0.65)).lineLimit(5)
+                Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
+            VStack(spacing: 0) {
+                arrow(-1)
+                Spacer(minLength: 2)
+                play(size: 58)
+                Spacer(minLength: 2)
+                arrow(1)
+            }
+            .padding(.vertical, -6)
         }
     }
 }

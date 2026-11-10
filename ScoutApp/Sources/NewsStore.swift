@@ -194,7 +194,7 @@ final class NewsStore: ObservableObject {
         let imp = s.importance ?? Double(s.impactLevel * 2 + 3)
         let hours = max(0, now.timeIntervalSince(s.published) / 3600)
         let liked: Double = (!interests.isEmpty && (s.topics ?? []).contains(where: { interests.contains($0) })) ? 1.5 : 0
-        let base = imp * 1.6 + log2(Double(s.outletCount)) * 3 + Double(s.impactLevel) + (s.isRumour ? 0.5 : 0) + liked - outletPenalty(s)
+        let base = imp * 1.6 + log2(Double(s.outletCount)) * 3 + Double(s.impactLevel) + liked - outletPenalty(s)
         return base * pow(0.5, hours / 30)   // loses half its weight every 30 hours
     }
 
@@ -299,10 +299,9 @@ final class NewsStore: ObservableObject {
         }
     }
 
-    /// The topic that put a story in For you, for the small line on its card.
+    /// The small line under a story on For you: none (it used to say which topic put it there).
     func reason(_ s: Story) -> String? {
-        if let t = (s.topics ?? []).first(where: { interests.contains($0) }) { return "Because you follow \(t)" }
-        return (s.importance ?? 0) >= 8 ? "One of today's biggest stories" : nil
+        nil
     }
 
     /// Every story that names a company, newest first.

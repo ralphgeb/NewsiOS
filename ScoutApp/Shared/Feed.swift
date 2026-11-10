@@ -160,6 +160,6 @@ struct BriefingDigest: Hashable {
         topic: .tech, label: "Morning tech briefing",
         title: "Your briefing arrives at 6:00 each morning",
         teaser: nil, summary: "The day's biggest stories, read and summarised for you.",
-        lines: ["Top stories with pictures", "Rumour watch with the odds", "Companies to watch"],
+        lines: ["Top stories with pictures", "Listen in a minute or two", "Companies to watch"],
         generated: .now, id: "sample")
 }

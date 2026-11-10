@@ -130,7 +130,6 @@ struct StoryDetailView: View {
                     }
                     head(s)
                     summaryCard(s)
-                    if s.status != "news", s.status != nil, s.likelihood != nil { RumourCheckCard(story: s) }
                     if !(s.stocks ?? []).isEmpty || !(s.marketTake ?? "").isEmpty { MarketImpactCard(story: s) }
                     coverage(s)
                     if count > 1 {
@@ -169,7 +168,6 @@ struct StoryDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    StatusPill(story: s)
                     ForEach([s.newsSection.title] + (s.topics ?? []).filter { $0 != "Other" }, id: \.self) { t in
                         Text(t)
                             .font(.system(size: 11, weight: .semibold))
@@ -268,55 +266,6 @@ struct StoryDetailView: View {
             .scoutCard(padding: 16)
         }
         .buttonStyle(PressStyle())
-    }
-}
-
-/// The AI's odds, in Halo's ring.
-struct RumourCheckCard: View {
-    let story: Story
-
-    var body: some View {
-        let p = Double(story.odds ?? 50) / 100
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Rumour check").scoutLabel()
-                Spacer()
-                StatusPill(story: story)
-            }
-            HStack(spacing: 16) {
-                ZStack {
-                    Ring(progress: p, lineWidth: 7)
-                    Group {
-                        switch story.status {
-                        case "confirmed": Image(systemName: "checkmark").font(.system(size: 20, weight: .bold))
-                        case "denied": Image(systemName: "xmark").font(.system(size: 20, weight: .bold))
-                        default: Text("\(story.odds ?? 50)").font(Theme.number(24))
-                        }
-                    }
-                    .foregroundStyle(Theme.ink)
-                }
-                .frame(width: 76, height: 76)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(story.verdict).font(Theme.headline(22)).foregroundStyle(p < 0.35 ? Theme.accent : Theme.text)
-                    Text("\(story.outletCount) outlet\(story.outletCount > 1 ? "s" : "") reporting · first seen \(Format.ago(story.firstSeen).lowercased())")
-                        .font(.system(size: 13)).foregroundStyle(Theme.secondary)
-                }
-            }
-            if let r = story.likelihoodReason, !r.isEmpty {
-                Text(r).font(.system(size: 15)).foregroundStyle(Theme.text.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
-            }
-            if let signals = story.signals, !signals.isEmpty {
-                FlowLayout(spacing: 6) {
-                    ForEach(signals, id: \.self) { s in
-                        Text(s).font(.system(size: 12, weight: .medium))
-                            .padding(.horizontal, 9).padding(.vertical, 5)
-                            .background(Theme.track, in: Capsule())
-                            .foregroundStyle(Theme.secondary)
-                    }
-                }
-            }
-        }
-        .scoutCard()
     }
 }
 

@@ -108,6 +108,8 @@ struct RemoteImage<Placeholder: View>: View {
 /// A story's picture, or a quiet box with the outlet's name when it has none.
 struct StoryImage: View {
     let story: Story?
+    /// Fades the bottom of the picture into the card's colour, so the headline below sits in it.
+    var fade = false
 
     var body: some View {
         Color.clear
@@ -126,6 +128,15 @@ struct StoryImage: View {
                         }
                         .foregroundStyle(Theme.tertiary)
                     }
+                }
+            }
+            .overlay {
+                if fade && Design.bold {
+                    LinearGradient(stops: [.init(color: Theme.card.opacity(0), location: 0.45),
+                                           .init(color: Theme.card.opacity(0.75), location: 0.8),
+                                           .init(color: Theme.card, location: 1)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .allowsHitTesting(false)
                 }
             }
             .clipped()
@@ -165,31 +176,6 @@ struct Favicon: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-    }
-}
-
-/// "Rumour · 45%", "Confirmed" or "Denied".
-struct StatusPill: View {
-    let story: Story
-
-    var body: some View {
-        if let text {
-            Text(text)
-                .font(.system(size: 11, weight: .semibold))
-                .padding(.horizontal, 8)
-                .frame(height: 20)
-                .background(story.status == "denied" ? Theme.accent.opacity(0.15) : Theme.track, in: Capsule())
-                .foregroundStyle(story.status == "denied" ? Theme.accent : Theme.text)
-        }
-    }
-
-    private var text: String? {
-        switch story.status {
-        case "rumour": return "Rumour · \(story.odds.map { "\($0)%" } ?? "?")"
-        case "confirmed": return "Confirmed"
-        case "denied": return "Denied"
-        default: return nil
-        }
     }
 }
 
@@ -250,32 +236,6 @@ struct SectionHead: View {
     }
 }
 
-/// How likely a rumour is, as a bar: ink when likely, accent when unlikely.
-struct OddsBar: View {
-    let story: Story
-
-    var body: some View {
-        let p = Double(story.odds ?? 50) / 100
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(story.verdict).font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p < 0.35 ? Theme.accent : Theme.text)
-                Spacer()
-                Text("\(story.outletCount) outlet\(story.outletCount > 1 ? "s" : "") · \(Format.ago(story.updated))")
-                    .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.secondary)
-            }
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.track)
-                    Capsule().fill(p < 0.35 ? Theme.accent : Theme.ink.opacity(0.35 + 0.65 * p))
-                        .frame(width: max(6, g.size.width * p))
-                }
-            }
-            .frame(height: 5)
-        }
-    }
-}
-
 // MARK: - Cards and rows
 
 /// A big picture over the headline and summary.
@@ -284,7 +244,7 @@ struct HeroCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            StoryImage(story: story)
+            StoryImage(story: story, fade: true)
                 .frame(height: Design.heroImage)
             VStack(alignment: .leading, spacing: 8) {
                 SourceLine(story: story)
@@ -300,11 +260,11 @@ struct HeroCard: View {
                 }
                 HStack(spacing: 6) {
                     Text(Format.ago(story.published)).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
-                    StatusPill(story: story)
                     TickerChips(story: story)
                 }
             }
             .padding(16)
+            .padding(.top, -Design.fadeOverlap)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.card)
@@ -335,10 +295,7 @@ struct StoryRow: View {
                 if let text, !text.isEmpty {
                     Text(text).font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(3)
                 }
-                HStack(spacing: 6) {
-                    Text(Format.ago(story.published)).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
-                    StatusPill(story: story)
-                }
+                Text(Format.ago(story.published)).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.tertiary)
                 TickerChips(story: story)
             }
             Spacer(minLength: 0)

@@ -216,12 +216,12 @@ struct SectionCover: View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .bottomLeading) {
                 NavigationLink(value: lead.map { StoryRoute(id: $0.id, sequence: sequence) }) {
-                    StoryImage(story: lead).frame(height: Design.briefingImage)
+                    StoryImage(story: lead, fade: true).frame(height: Design.briefingImage)
                 }
                 .buttonStyle(PressStyle())
                 .disabled(lead == nil)
                 // listen: on the picture, where it's easy to see
-                BriefingListen(topic: topic, brief: brief).padding(14)
+                BriefingListen(topic: topic, brief: brief).padding(.horizontal, 14).padding(.bottom, 22)
             }
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
