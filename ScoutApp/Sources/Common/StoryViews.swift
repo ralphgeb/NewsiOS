@@ -285,7 +285,7 @@ struct HeroCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             StoryImage(story: story)
-                .frame(height: 200)
+                .frame(height: Design.heroImage)
             VStack(alignment: .leading, spacing: 8) {
                 SourceLine(story: story)
                 Text(story.title)
@@ -343,7 +343,7 @@ struct StoryRow: View {
             }
             Spacer(minLength: 0)
             StoryImage(story: story)
-                .frame(width: 86, height: 86)
+                .frame(width: Design.thumbnail, height: Design.thumbnail)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .padding(.horizontal, 16)

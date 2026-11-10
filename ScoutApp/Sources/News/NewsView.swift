@@ -215,7 +215,7 @@ struct SectionCover: View {
     private var leadCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             NavigationLink(value: lead.map { StoryRoute(id: $0.id, sequence: sequence) }) {
-                StoryImage(story: lead).frame(height: 190)
+                StoryImage(story: lead).frame(height: Design.briefingImage)
             }
             .buttonStyle(PressStyle())
             .disabled(lead == nil)

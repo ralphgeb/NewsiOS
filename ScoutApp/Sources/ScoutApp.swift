@@ -123,6 +123,8 @@ struct RootView: View {
                 .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
                 .tag(3)
         }
+        // like Apple News in the 2.0 look: the tab bar shrinks to a circle while you scroll down
+        .modifier(MinimizingTabBar())
         // Colors are read when views draw, so a new look rebuilds the pages (the sheet stays open).
         .id(look.appearance)
         // the tab you're on is highlighted in the accent
@@ -162,4 +164,16 @@ extension Notification.Name {
 @MainActor
 enum DeepLink {
     static var pending: URL?
+}
+
+/// The tab bar folds into a small button while scrolling down, and opens again at the top or when
+/// tapped (iOS 26 and later, in the 2.0 look).
+private struct MinimizingTabBar: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), Design.bold {
+            content.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            content
+        }
+    }
 }

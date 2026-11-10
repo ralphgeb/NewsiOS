@@ -35,9 +35,11 @@ enum Theme {
         .system(size: size, weight: weight, design: Appearance.current.numberStyle.design).monospacedDigit()
     }
 
-    /// Headlines in the chosen style.
+    /// Headlines in the chosen style (a size up and a weight heavier in the 2.0 look).
     static func headline(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
-        .system(size: size, weight: weight, design: Appearance.current.numberStyle.design)
+        .system(size: Design.bold ? (size * 1.06).rounded() : size,
+                weight: Design.bold ? Design.heavier(weight) : weight,
+                design: Appearance.current.numberStyle.design)
     }
 
     /// Small uppercase labels.
@@ -87,5 +89,34 @@ struct Ring: View {
             }
         }
         .padding(lineWidth / 2)
+    }
+}
+
+/// Scout 2.0's bolder look: narrower margins, bigger pictures, heavier headlines and a tab bar
+/// that shrinks while you scroll. To go back to the first look, set `bold` to false: every
+/// size below falls back to its original value.
+enum Design {
+    static let bold = true
+
+    /// Space between the cards and the screen's edges (was 20; a quarter less).
+    static var sideMargin: CGFloat { bold ? 15 : 20 }
+    /// The square picture beside a story in a list.
+    static var thumbnail: CGFloat { bold ? 108 : 86 }
+    /// The picture on a big story card.
+    static var heroImage: CGFloat { bold ? 250 : 200 }
+    /// The pictures on Today's top stories.
+    static var topImage: CGFloat { bold ? 230 : 180 }
+    /// The picture over a section's briefing.
+    static var briefingImage: CGFloat { bold ? 240 : 190 }
+
+    static func heavier(_ w: Font.Weight) -> Font.Weight {
+        switch w {
+        case .regular: return .medium
+        case .medium: return .semibold
+        case .semibold: return .bold
+        case .bold: return .heavy
+        case .heavy: return .black
+        default: return w
+        }
     }
 }

@@ -31,7 +31,7 @@ struct ScoutPage<Pinned: View, Content: View>: View {
         ZStack(alignment: .top) {
             ScrollView {
                 VStack(spacing: 16) { content() }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, Design.sideMargin)
                     .padding(.top, PageHeader.height + pinnedHeight + 10)
                     .padding(.bottom, 36)
                     // never wider than the screen, so the page only ever moves up and down

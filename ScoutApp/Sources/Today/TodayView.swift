@@ -466,7 +466,7 @@ struct NumberedHero: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             StoryImage(story: story)
-                .frame(height: 180)
+                .frame(height: Design.topImage)
                 .overlay(alignment: .topLeading) {
                     Text("\(number)")
                         .font(Theme.number(15, weight: .bold))
