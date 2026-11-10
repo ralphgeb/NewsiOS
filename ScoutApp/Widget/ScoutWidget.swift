@@ -19,7 +19,8 @@ struct BriefingEntry: TimelineEntry {
 
 struct BriefingProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> BriefingEntry {
-        BriefingEntry(date: .now, digest: .sample)
+        Appearance.current = Appearance.load()
+        return BriefingEntry(date: .now, digest: .sample)
     }
 
     func snapshot(for config: BriefingConfig, in context: Context) async -> BriefingEntry {

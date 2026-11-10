@@ -19,15 +19,18 @@ struct HeadlinesEntry: TimelineEntry {
         var lead: String = ""
     }
 
-    static let sample = HeadlinesEntry(date: .now, stories: [
+    static var sample: HeadlinesEntry { HeadlinesEntry(date: .now, stories: [
         Line(id: "1", title: "Your top stories appear here every morning", outlet: "Scout", published: .now),
         Line(id: "2", title: "Ranked by how big they are and the topics you follow", outlet: "Scout", published: .now),
         Line(id: "3", title: "Tap one to open News", outlet: "Scout", published: .now),
-    ], updated: .now)
+    ], updated: .now) }
 }
 
 struct HeadlinesProvider: AppIntentTimelineProvider {
-    func placeholder(in context: Context) -> HeadlinesEntry { .sample }
+    func placeholder(in context: Context) -> HeadlinesEntry {
+        Appearance.current = Appearance.load()
+        return .sample
+    }
 
     func snapshot(for config: HeadlinesConfig, in context: Context) async -> HeadlinesEntry {
         Appearance.current = Appearance.load()

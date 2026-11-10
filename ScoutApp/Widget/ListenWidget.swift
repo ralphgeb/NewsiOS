@@ -45,7 +45,8 @@ struct ListenEntry: TimelineEntry {
 
 struct ListenProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> ListenEntry {
-        ListenEntry(date: .now, topic: .tech, titles: [:])
+        Appearance.current = Appearance.load()
+        return ListenEntry(date: .now, topic: .tech, titles: [:])
     }
 
     func snapshot(for config: ListenConfig, in context: Context) async -> ListenEntry {
@@ -65,7 +66,7 @@ struct ListenProvider: AppIntentTimelineProvider {
         for t in Topic.allCases {
             guard let b = briefing?.section(t) else { continue }
             titles[t.rawValue] = b.title
-            summaries[t.rawValue] = Self.sentences(b.summary ?? "", 4)
+            summaries[t.rawValue] = Self.sentences(b.summary ?? "", 3)
         }
         // the section the arrows chose, else the one picked in Edit Widget
         let topic = Shared.defaults.string(forKey: ListenStepIntent.key).flatMap(Topic.init(rawValue:)) ?? config.section.topic
@@ -141,9 +142,9 @@ struct ListenWidgetView: View {
     private func arrow(_ step: Int) -> some View {
         Button(intent: ListenStepIntent(step: step)) {
             Image(systemName: step < 0 ? "chevron.up" : "chevron.down")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(text.opacity(0.75))
-                .frame(width: 44, height: 44)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(text.opacity(0.7))
+                .frame(width: 40, height: 40)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -167,9 +168,9 @@ struct ListenWidgetView: View {
             Spacer(minLength: 4)
             arrow(1)
         }
-        .frame(width: 44)
-        .padding(.vertical, -6)
-        .padding(.trailing, -6)
+        .frame(width: 40)
+        .padding(.vertical, -8)
+        .padding(.trailing, -8)
     }
 
     private var small: some View {
@@ -187,30 +188,26 @@ struct ListenWidgetView: View {
         }
     }
 
+    /// Like the small one, with the headline and the briefing's opening beside the play button.
     private var medium: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    label
-                    Text("· \(topic.title)").font(.system(size: 10, weight: .semibold)).tracking(1).textCase(.uppercase)
-                        .foregroundStyle(text.opacity(0.5))
-                }
+                label
+                Text(topic.title).font(Theme.headline(17, weight: .bold)).foregroundStyle(text)
+                Spacer(minLength: 0)
+                play(size: 44)
+            }
+            .frame(width: 92, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
                 Text(entry.titles[topic.rawValue] ?? "Your \(topic.title) briefing")
-                    .font(Theme.headline(14.5, weight: .bold)).foregroundStyle(text).lineLimit(2)
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(text).lineLimit(2)
                 Text(entry.summaries[topic.rawValue] ?? "Briefings arrive by 6:00 each morning.")
-                    .font(.system(size: 11)).lineSpacing(1.5).foregroundStyle(text.opacity(0.68))
-                    .lineLimit(6).truncationMode(.tail)
+                    .font(.system(size: 11.5)).lineSpacing(1).foregroundStyle(text.opacity(0.62))
+                    .lineLimit(5)
                 Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-            VStack(spacing: 0) {
-                arrow(-1)
-                Spacer(minLength: 2)
-                play(size: 58)
-                Spacer(minLength: 2)
-                arrow(1)
-            }
-            .padding(.vertical, -6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            arrows
         }
     }
 }

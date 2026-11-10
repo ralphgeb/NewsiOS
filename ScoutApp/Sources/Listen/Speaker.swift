@@ -179,44 +179,34 @@ struct BriefingListen: View {
 
     var body: some View {
         let on = speaker.isPlaying(id)
-        let started = speaker.playing == id
         Button {
             Task { await play() }
         } label: {
-            HStack(spacing: 11) {
-                ZStack {
-                    Circle().fill(Theme.accent)
-                    Image(systemName: on ? "pause.fill" : "play.fill")
-                        .font(.system(size: 15, weight: .black))
-                        .foregroundStyle(.white)
-                        .offset(x: on ? 0 : 1.5)
-                        .contentTransition(.symbolEffect(.replace))
+            HStack(spacing: 7) {
+                Image(systemName: on ? "pause.fill" : "play.fill")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(Theme.accent, in: Circle())
+                    .contentTransition(.symbolEffect(.replace))
+                if on {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 12, weight: .semibold))
+                        .symbolEffect(.variableColor.iterative, isActive: true)
+                } else {
+                    Text("\(minutes) min")
                 }
-                .frame(width: 40, height: 40)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(on ? "Playing" : started ? "Paused" : "Listen to the briefing")
-                        .font(.system(size: 15, weight: .bold))
-                    HStack(spacing: 5) {
-                        Image(systemName: "waveform")
-                            .symbolEffect(.variableColor.iterative, isActive: on)
-                        Text("\(minutes) min")
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                    .opacity(0.75)
-                }
-                .foregroundStyle(.white)
-                .padding(.trailing, 8)
             }
-            .padding(5)
-            .background(.ultraThinMaterial.opacity(0.9), in: Capsule())
-            .background(Color.black.opacity(0.35), in: Capsule())
-            .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
-            .environment(\.colorScheme, .dark)
-            .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Theme.text)
+            .padding(.leading, 4).padding(.trailing, 11)
+            .frame(height: 32)
+            .background(Theme.card, in: Capsule())
+            .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
         }
         .buttonStyle(PressStyle())
-        .sensoryFeedback(.impact(weight: .medium), trigger: on)
-        .accessibilityLabel(on ? "Pause the \(topic.title) briefing" : "Listen to the \(topic.title) briefing")
+        .sensoryFeedback(.selection, trigger: on)
+        .accessibilityLabel(on ? "Pause the \(topic.title) briefing" : "Listen to the \(topic.title) briefing, \(minutes) minutes")
         .task { index = await AudioIndex.load() }
     }
 

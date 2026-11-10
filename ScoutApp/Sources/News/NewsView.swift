@@ -35,7 +35,7 @@ struct NewsView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScoutPage(showSettings: $showSettings, title: "\(shownEdition) Briefing", subtitle: subtitle, pinnedHeight: 50,
+            ScoutPage(showSettings: $showSettings, title: "Briefing", subtitle: subtitle, pinnedHeight: 50,
                       onRefresh: { await store.refresh() }, isRefreshing: store.isLoading,
                       pageKey: section.rawValue) {
                 CapsuleSwitcher(items: NewsSection.allCases, selection: sectionBinding, title: \.rawValue)
@@ -81,9 +81,10 @@ struct NewsView: View {
         }
     }
 
+    /// "Your morning briefing" or "Your evening briefing" (or which day's it is, when it's older).
     private var subtitle: String {
         guard let u = store.updated else { return store.isLoading ? "Loading…" : "Waiting for the first update" }
-        return Format.briefing(u)
+        return Calendar.current.isDateInToday(u) ? "Your \(shownEdition.lowercased()) briefing" : Format.briefing(u)
     }
 
     private func go(to next: NewsSection) {
@@ -221,7 +222,7 @@ struct SectionCover: View {
                 .buttonStyle(PressStyle())
                 .disabled(lead == nil)
                 // listen: on the picture, where it's easy to see
-                BriefingListen(topic: topic, brief: brief).padding(.horizontal, 14).padding(.bottom, 22)
+                BriefingListen(topic: topic, brief: brief).padding(12)
             }
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
