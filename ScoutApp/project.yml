@@ -84,3 +84,5 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ralphgeb.scout.widget
         TARGETED_DEVICE_FAMILY: "1"
+        # code shared with the app checks this to leave out app-only parts (the Listen player)
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET"

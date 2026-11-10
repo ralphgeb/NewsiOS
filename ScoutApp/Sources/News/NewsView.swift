@@ -223,13 +223,6 @@ struct SectionCover: View {
                 HStack(spacing: 8) {
                     Circle().fill(Theme.accent).frame(width: 7, height: 7)
                     Text(topic.coverLabel + (brief.generated.map { " · \(Format.time($0))" } ?? "")).scoutLabel()
-                    Spacer(minLength: 8)
-                    // reads the lead paragraph, then each highlight
-                    ListenButton(id: "brief-\(topic.rawValue)-\(brief.generated?.timeIntervalSince1970 ?? 0)",
-                                 title: "\(topic.title) briefing") {
-                        [brief.title, NewsStore.paragraphs(brief.summary).first ?? ""]
-                            + (brief.highlights.isEmpty ? brief.points.map(\.line) : brief.highlights.map { $0.label.isEmpty ? $0.text : "\($0.label). \($0.text)" })
-                    }
                 }
                 Text(brief.title).font(Theme.headline(22, weight: .bold)).foregroundStyle(Theme.text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -237,6 +230,8 @@ struct SectionCover: View {
                     Text(first).font(.system(size: 15)).lineSpacing(2).foregroundStyle(Theme.text.opacity(0.85))
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // listen: the phone's voice, or the two recorded voices to compare
+                BriefingListen(topic: topic, brief: brief).padding(.top, 2)
             }
             .padding(18)
         }

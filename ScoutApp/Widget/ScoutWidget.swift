@@ -6,6 +6,7 @@ struct ScoutWidgets: WidgetBundle {
     var body: some Widget {
         BriefingWidget()
         HeadlinesWidget()
+        ListenWidget()
     }
 }
 
