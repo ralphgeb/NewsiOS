@@ -60,12 +60,19 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     /// Plays a recorded briefing from the Scout service, or pauses and resumes it.
     func play(_ id: String, title: String, url: URL) {
+        play(id, title: title, urls: [url])
+    }
+
+    /// Plays recordings one after the other (the short opening, then the briefing).
+    func play(_ id: String, title: String, urls: [URL]) {
         if playing == id { toggle(); return }
+        guard let lastURL = urls.last else { return }
         stop()
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [])
         try? AVAudioSession.sharedInstance().setActive(true)
-        let item = AVPlayerItem(url: url)
-        let player = AVPlayer(playerItem: item)
+        let items = urls.dropLast().map { AVPlayerItem(url: $0) } + [AVPlayerItem(url: lastURL)]
+        let item = items[items.count - 1]
+        let player = AVQueuePlayer(items: items)
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.finish() }
         }
@@ -135,6 +142,34 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in if !self.synth.isSpeaking { self.finish() } }
+    }
+}
+
+/// The friendly opening ("Had your coffee yet?…") plays before the first briefing you hear in
+/// each edition (morning and evening); after that, briefings start straight with the news. The
+/// note is kept in the App Group, so the widgets' play buttons count too.
+enum Intro {
+    private static let key = "listen.introPlayed"
+
+    /// Today's date and edition, e.g. "2026-11-10-Morning".
+    static var current: String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Europe/London") ?? .current
+        let d = cal.dateComponents([.year, .month, .day, .hour], from: .now)
+        return String(format: "%04d-%02d-%02d-", d.year ?? 0, d.month ?? 0, d.day ?? 0) + ((d.hour ?? 0) < 15 ? "Morning" : "Evening")
+    }
+
+    static var due: Bool { Shared.defaults.string(forKey: key) != current }
+    static func markPlayed() { Shared.defaults.set(current, forKey: key) }
+
+    /// What to play for a section: its opening first when one is due, then the briefing.
+    static func urls(_ index: AudioIndex, _ section: String, voice: String) -> [URL]? {
+        guard let main = index.url(section, voice) else { return nil }
+        if due, let intro = index.url(section, "intro") {
+            markPlayed()
+            return [intro, main]
+        }
+        return [main]
     }
 }
 
@@ -214,8 +249,8 @@ struct BriefingListen: View {
         let title = "\(topic.title) briefing"
         if speaker.playing == id { speaker.toggle(); return }
         if index?.url(topic.rawValue, Self.voice) == nil { index = await AudioIndex.load() }
-        if let url = index?.url(topic.rawValue, Self.voice) {
-            speaker.play(id, title: title, url: url)
+        if let index, let urls = Intro.urls(index, topic.rawValue, voice: Self.voice) {
+            speaker.play(id, title: title, urls: urls)
         } else {
             speaker.play(id, title: title, parts: Self.parts(brief))
         }
@@ -239,8 +274,8 @@ enum PlayBriefing {
         let id = "brief-\(section)-\(brief?.generated?.timeIntervalSince1970 ?? 0)-\(voice)"
         let speaker = Speaker.shared
         if speaker.playing == id { speaker.toggle(); return }
-        if let url = await AudioIndex.load()?.url(section, voice) {
-            speaker.play(id, title: "\(topic.title) briefing", url: url)
+        if let index = await AudioIndex.load(), let urls = Intro.urls(index, section, voice: voice) {
+            speaker.play(id, title: "\(topic.title) briefing", urls: urls)
             await speaker.waitUntilSounding()
         } else if let brief {
             speaker.play(id, title: "\(topic.title) briefing", parts: BriefingListen.parts(brief))
