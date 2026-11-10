@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Your topics as tappable bubbles, grouped by section, like Apple News and Particle's pickers.
-/// The same picks drive For you on Today and in News.
+/// The same picks drive For you on Today.
 struct TopicChips: View {
     @EnvironmentObject private var store: NewsStore
     /// The welcome's shorter list, so every choice fits on one screen; Settings shows them all.
@@ -93,7 +93,7 @@ struct TopicsPage: View {
             VStack(alignment: .leading, spacing: 26) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Your topics").font(.system(size: 26, weight: .semibold)).tracking(-0.3).foregroundStyle(Theme.text)
-                    Text("For you on Today and in News follows these, with the day's biggest stories mixed in.")
+                    Text("For you on Today follows these, with the day's biggest stories mixed in.")
                         .font(.system(size: 14)).foregroundStyle(Theme.secondary)
                 }
                 RegionChips()

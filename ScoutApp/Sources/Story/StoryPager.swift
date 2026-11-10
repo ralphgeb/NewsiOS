@@ -11,6 +11,7 @@ struct WebLink: Identifiable {
 /// previous one; swipe from the left edge to go back.
 struct StoryPager: View {
     @EnvironmentObject private var store: NewsStore
+    @ObservedObject private var speaker = Speaker.shared
     let route: StoryRoute
     @State private var current: String?
     @State private var reading: WebLink?
@@ -26,6 +27,11 @@ struct StoryPager: View {
     }
 
     private var story: Story? { store.story(current ?? route.id) }
+
+    /// What Listen reads: the headline, Scout's summary and its key points.
+    static func spoken(_ s: Story) -> [String] {
+        [s.title, s.summary ?? s.claim ?? ""] + (s.keyPoints ?? [])
+    }
 
     var body: some View {
         let list = ids
@@ -57,14 +63,26 @@ struct StoryPager: View {
         .toolbar {
             if let story {
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    // reads Scout's summary aloud; saving and sharing sit in the menu next to it
                     Button {
-                        withAnimation(.snappy) { store.toggleSaved(story) }
+                        speaker.play("story-\(story.id)", title: story.title, parts: Self.spoken(story))
                     } label: {
-                        Image(systemName: store.isSaved(story.id) ? "bookmark.fill" : "bookmark")
+                        Image(systemName: speaker.isPlaying("story-\(story.id)") ? "pause.circle.fill" : "play.circle")
+                            .contentTransition(.symbolEffect(.replace))
                     }
-                    .accessibilityLabel(store.isSaved(story.id) ? "Remove from Saved" : "Save")
-                    if let url = story.lead?.url {
-                        ShareLink(item: url, subject: Text(story.title)) { Image(systemName: "square.and.arrow.up") }
+                    .accessibilityLabel(speaker.isPlaying("story-\(story.id)") ? "Pause reading" : "Listen to the summary")
+                    Menu {
+                        Button {
+                            withAnimation(.snappy) { store.toggleSaved(story) }
+                        } label: {
+                            Label(store.isSaved(story.id) ? "Remove from Saved" : "Save",
+                                  systemImage: store.isSaved(story.id) ? "bookmark.slash" : "bookmark")
+                        }
+                        if let url = story.lead?.url {
+                            ShareLink(item: url, subject: Text(story.title)) { Label("Share", systemImage: "square.and.arrow.up") }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
             }

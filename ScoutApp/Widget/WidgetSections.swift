@@ -22,8 +22,11 @@ enum WidgetSection: String, AppEnum {
 
     var title: String { topic?.title ?? "For you" }
 
-    /// Where a tap on the widget goes: that section in News.
-    var url: URL { URL(string: "scout://news?section=\(topic?.rawValue ?? "For you")".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "scout://news")! }
+    /// Where a tap on the widget goes: For you is Today; a section opens in Briefings.
+    var url: URL {
+        guard let topic else { return URL(string: "scout://today")! }
+        return URL(string: "scout://news?section=\(topic.rawValue)")!
+    }
 }
 
 /// The Briefing widget: one of the four sections' briefings.

@@ -112,7 +112,7 @@ struct RootView: View {
                 .tag(0)
             NewsView(showSettings: $showSettings)
                 .tint(Theme.ink)
-                .tabItem { Label("News", systemImage: "list.bullet.rectangle.portrait") }
+                .tabItem { Label("Briefings", systemImage: "list.bullet.rectangle.portrait") }
                 .tag(1)
             StocksView(showSettings: $showSettings)
                 .tint(Theme.ink)

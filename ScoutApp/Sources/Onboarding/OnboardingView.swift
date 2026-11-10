@@ -143,7 +143,7 @@ struct OnboardingView: View {
                 .tracking(-0.3)
                 .foregroundStyle(Theme.text)
                 .padding(.bottom, 4)
-            point("sun.horizon", "A briefing by 7:00",
+            point("sun.horizon", "A briefing by 6:00",
                   "Every morning Scout reads about 150 news sites from the UK, the US, Europe and Asia, and writes briefings on what happened, why it matters and what to watch.")
             point("cup.and.saucer", "It doesn't break news",
                   "It gathers the night's breaking news into one short, clear front page, ready before your first coffee.")

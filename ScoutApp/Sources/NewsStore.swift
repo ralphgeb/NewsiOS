@@ -1,9 +1,9 @@
 import SwiftUI
 import WidgetKit
 
-/// The sections along the top of News: For you (your topics), then the four fixed ones.
+/// The four sections along the top of Briefings (For you lives on Today).
 enum NewsSection: String, CaseIterable, Identifiable {
-    case all = "For you", tech = "Tech", finance = "Finance", world = "World", fashion = "Fashion"
+    case tech = "Tech", finance = "Finance", world = "World", fashion = "Fashion"
 
     var id: String { rawValue }
     var topic: Topic? { Topic(rawValue: rawValue) }
@@ -228,19 +228,62 @@ final class NewsStore: ObservableObject {
     /// mixed in so nothing major passes you by, and never more than three in a row on one topic.
     /// Before any topics are picked it's simply the most important stories.
     func forYou(_ pool: [Story], now: Date = .now) -> [Story] {
-        guard !interests.isEmpty else {
-            let scores = Dictionary(pool.map { ($0.id, rankScore($0, now: now)) }, uniquingKeysWith: { a, _ in a })
-            return pool.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) }
-        }
-        let picked = pool.filter { matchesInterests($0) || ($0.importance ?? 0) >= 8 }
-        let scores = Dictionary(picked.map { ($0.id, rankScore($0, now: now) + (matchesInterests($0) ? 4 : 0) + Self.regionWeight($0)) }, uniquingKeysWith: { a, _ in a })
-        var queue = picked.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) }
-        // spread topics out: a story whose main topic matches the last three waits its turn
+        let picked = interests.isEmpty ? pool : pool.filter { matchesInterests($0) || ($0.importance ?? 0) >= 8 }
+        let scores = Dictionary(picked.map { s in
+            (s.id, rankScore(s, now: now) + (interests.isEmpty ? 0 : (matchesInterests(s) ? 4 : 0) + Self.regionWeight(s)))
+        }, uniquingKeysWith: { a, _ in a })
+        var queue = Self.withoutRepeats(picked.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) })
+        // never two stories about the same thing in a row (two Jensen Huang stories, say), and
+        // never more than three in a row on one topic: the next one waits its turn
         var out: [Story] = []
         while !queue.isEmpty {
             let recent = out.suffix(3).compactMap { $0.topics?.first }
-            let i = queue.firstIndex { s in !(recent.count == 3 && Set(recent).count == 1 && s.topics?.first == recent[0]) } ?? 0
+            let crowded = { (s: Story) in recent.count == 3 && Set(recent).count == 1 && s.topics?.first == recent[0] }
+            let i = queue.prefix(10).firstIndex { s in !crowded(s) && !(out.last.map { Self.similar($0, s) } ?? false) } ?? 0
             out.append(queue.remove(at: i))
+        }
+        return out
+    }
+
+    // MARK: Telling stories apart
+
+    private static let stopWords: Set<String> = ["the", "and", "for", "with", "from", "that", "this", "after", "over", "into",
+        "about", "says", "said", "will", "would", "could", "amid", "more", "than", "what", "when", "their", "they", "have",
+        "has", "its", "new", "news", "report", "reports", "reportedly"]
+
+    /// The words that say what a story is about: the headline's longer words, and the companies it names.
+    static func keywords(_ s: Story) -> Set<String> {
+        let words = s.title.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+            .filter { $0.count >= 4 && !stopWords.contains($0) }
+        return Set(words)
+    }
+
+    /// The people and companies a headline names: capitalised words after the first.
+    static func names(_ s: Story) -> Set<String> {
+        let words = s.title.split(separator: " ").dropFirst().map { $0.trimmingCharacters(in: .punctuationCharacters) }
+        return Set(words.filter { $0.count >= 4 && ($0.first?.isUppercase ?? false) }.map { $0.lowercased() })
+            .union((s.stocks ?? []).prefix(2).map { $0.ticker.lowercased() })
+    }
+
+    /// About the same thing: they share a name (a person, a company, a ticker) or much of the headline.
+    static func similar(_ a: Story, _ b: Story) -> Bool {
+        if !names(a).isDisjoint(with: names(b)) { return true }
+        let ka = keywords(a), kb = keywords(b)
+        guard !ka.isEmpty, !kb.isEmpty else { return false }
+        return Double(ka.intersection(kb).count) / Double(ka.union(kb).count) >= 0.3
+    }
+
+    /// Drops near-copies of a story higher up (the same event told by two outlets).
+    static func withoutRepeats(_ list: [Story]) -> [Story] {
+        var out: [Story] = []
+        for s in list {
+            let ks = keywords(s)
+            let copy = out.contains { o in
+                let ko = keywords(o)
+                guard !ks.isEmpty, !ko.isEmpty else { return false }
+                return Double(ks.intersection(ko).count) / Double(ks.union(ko).count) >= 0.55
+            }
+            if !copy { out.append(s) }
         }
         return out
     }
@@ -346,7 +389,7 @@ final class NewsStore: ObservableObject {
             label: "Top stories", generated: updated, title: cover.title, intro: [], cover: cover,
             items: rest.prefix(7).map { FrontPage.Item(id: $0.id, story: $0, title: $0.title, text: reason($0)) },
             rumours: [], movers: Array(movers.prefix(6)), moversTitle: "Companies to watch", brief: [],
-            more: Array(rest.dropFirst(7).prefix(6)),
+            more: Array(rest.dropFirst(7).prefix(24)),   // For you lives on Today now, so it runs longer
             reviewed: ranked.count, isWritten: true, editions: [], editionID: nil)
     }
 

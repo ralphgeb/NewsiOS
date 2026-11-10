@@ -1,11 +1,14 @@
 import SwiftUI
 
-/// Every story from all the sites. All is ranked by importance; Tech, Finance, World and Fashion
-/// open with that section's front page and then run newest first. Swipe sideways between sections.
+/// Briefings: Tech, Finance, World and Fashion, each opening with the day's Morning or Evening
+/// briefing (Listen reads it out) and then its stories, newest first. Swipe sideways between
+/// sections. For you lives on Today.
 struct NewsView: View {
     @EnvironmentObject private var store: NewsStore
     @Binding var showSettings: Bool
-    @AppStorage("news.section") private var sectionRaw = NewsSection.all.rawValue
+    @AppStorage("news.section") private var sectionRaw = NewsSection.tech.rawValue
+    /// Morning or Evening, when the day has both (nil: the latest).
+    @State private var edition: String?
     /// How many stories each section shows, so a section you come back to is as long as you left it.
     @State private var limits: [NewsSection: Int] = [:]
     @State private var forward = true
@@ -13,7 +16,16 @@ struct NewsView: View {
     @AppStorage(Plus.key) private var hasPlus = false
     private var paywall: Bool { !hasPlus }
 
-    private var section: NewsSection { NewsSection(rawValue: sectionRaw) ?? .all }
+    private var section: NewsSection { NewsSection(rawValue: sectionRaw) ?? .tech }
+    private var topic: Topic { section.topic ?? .tech }
+
+    /// "Morning Briefing" or "Evening Briefing": the edition on show.
+    private var shownEdition: String {
+        if let edition, store.briefing.todaysEditions(topic).contains(edition) { return edition }
+        if let last = store.briefing.todaysEditions(topic).last { return last }
+        let h = store.briefing.section(topic)?.generated.map { Calendar.current.component(.hour, from: $0) } ?? 6
+        return h < 12 ? "Morning" : "Evening"
+    }
 
     private var sectionBinding: Binding<NewsSection> {
         Binding(get: { section }, set: { go(to: $0) })
@@ -23,7 +35,7 @@ struct NewsView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScoutPage(showSettings: $showSettings, title: "News", subtitle: subtitle, pinnedHeight: 50,
+            ScoutPage(showSettings: $showSettings, title: "\(shownEdition) Briefing", subtitle: subtitle, pinnedHeight: 50,
                       onRefresh: { await store.refresh() }, isRefreshing: store.isLoading,
                       pageKey: section.rawValue) {
                 CapsuleSwitcher(items: NewsSection.allCases, selection: sectionBinding, title: \.rawValue)
@@ -110,10 +122,15 @@ struct NewsView: View {
             } else if all.isEmpty {
                 EmptyCard(symbol: "magnifyingglass", title: "Nothing here yet", text: "Try another section.")
             } else {
-                if section == .all, store.interests.isEmpty {
-                    interestsPrompt
+                // Morning and Evening, when both are out
+                let editions = store.briefing.todaysEditions(topic)
+                if editions.count > 1 {
+                    Picker("Edition", selection: Binding(get: { shownEdition }, set: { e in withAnimation(.snappy) { edition = e } })) {
+                        ForEach(editions, id: \.self) { Text($0).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
                 }
-                let cover = section.topic.flatMap { store.briefing.section($0) }
+                let cover = section.topic.flatMap { store.briefing.section($0, edition: editions.count > 1 ? shownEdition : nil) }
                 let hero = cover == nil ? heroPick(items, section) : nil
                 if let topic = section.topic, let brief = cover {
                     SectionCover(topic: topic, brief: brief, lead: store.story(brief.leadStoryId), sequence: seq)
@@ -121,7 +138,7 @@ struct NewsView: View {
                     NavigationLink(value: StoryRoute(id: hero.id, sequence: seq)) { HeroCard(story: hero) }
                         .buttonStyle(PressStyle())
                 }
-                SectionHead(title: section == .all ? (store.interests.isEmpty ? "Top stories" : "For you") : "Latest", detail: "\(all.count) stories")
+                SectionHead(title: "Latest", detail: "\(all.count) stories")
                 // without Scout Plus, the first group of stories is open and everything from the
                 // first big picture card down is locked
                 ForEach(Array(chunks(items.filter { $0.id != hero?.id }).enumerated()), id: \.element.id) { i, chunk in
@@ -152,7 +169,7 @@ struct NewsView: View {
 
     /// The picture story at the top: the first with a picture among the top few.
     private func heroPick(_ items: [Story], _ section: NewsSection) -> Story? {
-        items.prefix(section == .all ? 3 : 6).first { $0.imageURL != nil } ?? items.first
+        items.prefix(6).first { $0.imageURL != nil } ?? items.first
     }
 
     private struct Chunk: Identifiable {
@@ -175,22 +192,6 @@ struct NewsView: View {
             i = end
         }
         return out
-    }
-
-    private var interestsPrompt: some View {
-        Button { showInterests = true } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "sparkles").foregroundStyle(Theme.accent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Make it yours").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
-                    Text("Pick your topics and For you follows them.").font(.system(size: 13)).foregroundStyle(Theme.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right").foregroundStyle(Theme.tertiary)
-            }
-            .scoutCard(padding: 16)
-        }
-        .buttonStyle(PressStyle())
     }
 }
 
@@ -222,6 +223,13 @@ struct SectionCover: View {
                 HStack(spacing: 8) {
                     Circle().fill(Theme.accent).frame(width: 7, height: 7)
                     Text(topic.coverLabel + (brief.generated.map { " · \(Format.time($0))" } ?? "")).scoutLabel()
+                    Spacer(minLength: 8)
+                    // reads the lead paragraph, then each highlight
+                    ListenButton(id: "brief-\(topic.rawValue)-\(brief.generated?.timeIntervalSince1970 ?? 0)",
+                                 title: "\(topic.title) briefing") {
+                        [brief.title, NewsStore.paragraphs(brief.summary).first ?? ""]
+                            + (brief.highlights.isEmpty ? brief.points.map(\.line) : brief.highlights.map { $0.label.isEmpty ? $0.text : "\($0.label). \($0.text)" })
+                    }
                 }
                 Text(brief.title).font(Theme.headline(22, weight: .bold)).foregroundStyle(Theme.text)
                     .fixedSize(horizontal: false, vertical: true)

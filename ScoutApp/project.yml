@@ -33,6 +33,7 @@ targets:
           - UIInterfaceOrientationPortrait
         UIBackgroundModes:
           - fetch
+          - audio          # Listen keeps reading with the screen locked
         BGTaskSchedulerPermittedIdentifiers:
           - com.ralphgeb.scout.refresh
         ITSAppUsesNonExemptEncryption: false

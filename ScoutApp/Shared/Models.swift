@@ -226,22 +226,39 @@ struct Briefing: Decodable {
     var editions: [Edition]
     var updated: Date?
     var sections: [String: SectionBrief]
+    /// The day's Morning and Evening section briefings, when both have been written.
+    var sectionEditions: [String: [String: SectionBrief]]
 
-    enum CodingKeys: String, CodingKey { case editions, updated, sections }
+    enum CodingKeys: String, CodingKey { case editions, updated, sections, sectionEditions }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         editions = c.lenientArray(.editions) ?? []
         updated = c.date(.updated)
         sections = c.lenient(.sections) ?? [:]
+        sectionEditions = c.lenient(.sectionEditions) ?? [:]
     }
 
     init() {
         editions = []
         sections = [:]
+        sectionEditions = [:]
     }
 
     func section(_ topic: Topic) -> SectionBrief? { sections[topic.rawValue] }
+
+    /// Today's editions of a section, in order: Morning, then Evening.
+    func todaysEditions(_ topic: Topic) -> [String] {
+        ["Morning", "Evening"].filter { name in
+            guard let g = sectionEditions[name]?[topic.rawValue]?.generated else { return false }
+            return Calendar.current.isDateInToday(g)
+        }
+    }
+
+    /// One edition of a section (nil: the latest).
+    func section(_ topic: Topic, edition: String?) -> SectionBrief? {
+        edition.flatMap { sectionEditions[$0]?[topic.rawValue] } ?? section(topic)
+    }
 }
 
 /// A morning or evening Tech briefing.

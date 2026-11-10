@@ -266,7 +266,7 @@ struct TodayView: View {
             } else {
                 EmptyCard(symbol: "sun.horizon",
                           title: "Your briefing is on its way",
-                          text: "Briefings arrive at 6:00 each morning. Pull down to check for the latest stories.")
+                          text: "Briefings arrive by 6:00 each morning. Pull down to check for the latest stories.")
             }
         }
     }
@@ -294,7 +294,7 @@ struct TodayView: View {
     static var nextUpdate: String {
         var london = Calendar(identifier: .gregorian)
         london.timeZone = TimeZone(identifier: "Europe/London") ?? .current
-        return london.component(.hour, from: .now) < 6 ? "at 6:00 London time" : "tomorrow at 6:00 London time"
+        return london.component(.hour, from: .now) < 6 ? "by 6:00 London time" : "tomorrow by 6:00 London time"
     }
 }
 
