@@ -13,11 +13,63 @@ struct TickerRoute: Hashable {
     let name: String?
 }
 
+private struct StoryNamespaceKey: EnvironmentKey {
+    static let defaultValue: Namespace.ID? = nil
+}
+
+extension EnvironmentValues {
+    /// Where a tab's story cards and the story page meet, so a card grows into its story.
+    var storyNamespace: Namespace.ID? {
+        get { self[StoryNamespaceKey.self] }
+        set { self[StoryNamespaceKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Gives a tab its own space for cards growing into their stories.
+    func storyZoomScope() -> some View { modifier(StoryZoomScope()) }
+
+    /// Marks a card as the one its story grows out of (iOS 18 and later).
+    func storyZoomSource(_ id: String?) -> some View { modifier(StoryZoomSource(id: id)) }
+}
+
+private struct StoryZoomScope: ViewModifier {
+    @Namespace private var ns
+    func body(content: Content) -> some View { content.environment(\.storyNamespace, ns) }
+}
+
+private struct StoryZoomSource: ViewModifier {
+    @Environment(\.storyNamespace) private var ns
+    let id: String?
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18, *), let ns, let id {
+            content.matchedTransitionSource(id: id, in: ns) { $0.clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous)) }
+        } else {
+            content
+        }
+    }
+}
+
+/// The story page, growing out of the card that was tapped.
+private struct StoryZoomDestination: View {
+    @Environment(\.storyNamespace) private var ns
+    let route: StoryRoute
+
+    var body: some View {
+        if #available(iOS 18, *), let ns {
+            StoryPager(route: route).navigationTransition(.zoom(sourceID: route.id, in: ns))
+        } else {
+            StoryPager(route: route)
+        }
+    }
+}
+
 extension View {
     /// The pages every tab can push: a story, and a company.
     func storyDestinations() -> some View {
         self
-            .navigationDestination(for: StoryRoute.self) { StoryPager(route: $0) }
+            .navigationDestination(for: StoryRoute.self) { StoryZoomDestination(route: $0) }
             .navigationDestination(for: TickerRoute.self) { StockDetailView(route: $0) }
     }
 }
@@ -113,19 +165,8 @@ struct StoryImage: View {
         Color.clear
             .overlay {
                 RemoteImage(url: story?.imageURL) {
-                    ZStack {
-                        Theme.track
-                        VStack(spacing: 6) {
-                            Image(systemName: story?.newsSection.symbol ?? "newspaper")
-                                .font(.system(size: 18, weight: .medium))
-                            Text(story?.outletName ?? "Scout")
-                                .font(Theme.headline(13))
-                                .lineLimit(2)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 8)
-                        }
-                        .foregroundStyle(Theme.tertiary)
-                    }
+                    // loading or no picture: Scout's mark, embossed in white
+                    ScoutPlaceholder()
                 }
             }
             .clipped()
@@ -311,6 +352,7 @@ struct StoryList: View {
             ForEach(stories) { s in
                 NavigationLink(value: StoryRoute(id: s.id, sequence: sequence)) { StoryRow(story: s) }
                     .buttonStyle(PressStyle())
+                    .storyZoomSource(s.id)
                 if s.id != stories.last?.id {
                     Rectangle().fill(Theme.hairline).frame(height: 0.5).padding(.leading, 16)
                 }
@@ -378,10 +420,24 @@ struct CapsuleSwitcher<Item: Hashable & Identifiable>: View {
     @Binding var selection: Item
     let title: (Item) -> String
     var badge: (Item) -> Int = { _ in 0 }
+    /// Share the full width equally instead of scrolling.
+    var fill = false
     @Namespace private var ns
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        if fill {
+            row.padding(.horizontal, Design.sideMargin)
+                .sensoryFeedback(.selection, trigger: selection)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                row.padding(.horizontal, 20)
+            }
+            .scrollClipDisabled()
+            .sensoryFeedback(.selection, trigger: selection)
+        }
+    }
+
+    private var row: some View {
             HStack(spacing: 6) {
                 ForEach(items) { item in
                     let on = item == selection
@@ -400,7 +456,9 @@ struct CapsuleSwitcher<Item: Hashable & Identifiable>: View {
                             }
                         }
                         .font(.system(size: 14, weight: .semibold))
-                        .padding(.horizontal, 14)
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                        .padding(.horizontal, fill ? 6 : 14)
+                        .frame(maxWidth: fill ? .infinity : nil)
                         .frame(height: 34)
                         .foregroundStyle(on ? Theme.background : Theme.text)
                         .background {
@@ -414,9 +472,5 @@ struct CapsuleSwitcher<Item: Hashable & Identifiable>: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 20)
-        }
-        .scrollClipDisabled()
-        .sensoryFeedback(.selection, trigger: selection)
     }
 }

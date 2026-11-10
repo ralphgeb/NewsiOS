@@ -38,7 +38,7 @@ struct NewsView: View {
             ScoutPage(showSettings: $showSettings, title: "Briefing", subtitle: subtitle, pinnedHeight: 50,
                       onRefresh: { await store.refresh() }, isRefreshing: store.isLoading,
                       pageKey: section.rawValue) {
-                CapsuleSwitcher(items: NewsSection.allCases, selection: sectionBinding, title: \.rawValue)
+                CapsuleSwitcher(items: NewsSection.allCases, selection: sectionBinding, title: \.rawValue, fill: true)
                     .frame(height: 46)
                     .padding(.bottom, 4)
             } content: {
@@ -138,6 +138,7 @@ struct NewsView: View {
                 } else if let hero {
                     NavigationLink(value: StoryRoute(id: hero.id, sequence: seq)) { HeroCard(story: hero) }
                         .buttonStyle(PressStyle())
+                        .storyZoomSource(hero.id)
                 }
                 SectionHead(title: "Latest", detail: "\(all.count) stories")
                 // without Scout Plus, the first group of stories is open and everything from the
@@ -146,6 +147,7 @@ struct NewsView: View {
                     if let big = chunk.hero {
                         NavigationLink(value: StoryRoute(id: big.id, sequence: seq)) { HeroCard(story: big) }
                             .buttonStyle(PressStyle())
+                            .storyZoomSource(big.id)
                             .locked(paywall && i > 0)
                             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     } else {
@@ -215,14 +217,28 @@ struct SectionCover: View {
     // The picture, the headline of the day and one paragraph.
     private var leadCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .bottomLeading) {
+            let style = BriefingListen.style(for: topic)
+            ZStack(alignment: style == .bubble ? .bottomTrailing : .bottomLeading) {
                 NavigationLink(value: lead.map { StoryRoute(id: $0.id, sequence: sequence) }) {
                     StoryImage(story: lead).frame(height: Design.briefingImage)
                 }
                 .buttonStyle(PressStyle())
                 .disabled(lead == nil)
-                // listen: on the picture, where it's easy to see
-                BriefingListen(topic: topic, brief: brief).padding(12)
+                .storyZoomSource(lead?.id)
+                // listen: each section tries a different design for now
+                if style == .pill {
+                    BriefingListen(topic: topic, brief: brief, style: .pill, artwork: lead?.imageURL).padding(12)
+                } else if style == .bubble {
+                    BriefingListen(topic: topic, brief: brief, style: .bubble, artwork: lead?.imageURL)
+                        .padding(.trailing, 14)
+                        .offset(y: 38)
+                }
+            }
+            .zIndex(1)
+            if style == .bar || style == .player {
+                BriefingListen(topic: topic, brief: brief, style: style, artwork: lead?.imageURL)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 14)
             }
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {

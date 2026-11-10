@@ -114,6 +114,7 @@ struct HistoryView: View {
                     }
                     NavigationLink(value: StoryRoute(id: s.id, sequence: sequence)) { StoryRow(story: s) }
                         .buttonStyle(PressStyle())
+                        .storyZoomSource(s.id)
                         .disabled(editing)
                 }
                 if s.id != stories.last?.id {

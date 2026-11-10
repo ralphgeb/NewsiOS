@@ -415,6 +415,7 @@ struct TopStoriesCard: View {
                         NumberedHero(number: i + 1, story: s, title: item.title, text: item.text)
                     }
                     .buttonStyle(PressStyle())
+                    .storyZoomSource(s.id)
                 } else {
                     plain(item, number: i + 1)
                 }
@@ -429,6 +430,7 @@ struct TopStoriesCard: View {
                                     StoryRow(story: s, number: i + 3, text: item.text)
                                 }
                                 .buttonStyle(PressStyle())
+                                .storyZoomSource(s.id)
                             } else {
                                 plain(item, number: i + 3).background(Color.clear)
                             }
@@ -608,6 +610,7 @@ struct MoreCard: View {
             if let hero = g.hero {
                 NavigationLink(value: StoryRoute(id: hero.id, sequence: sequence)) { HeroCard(story: hero) }
                     .buttonStyle(PressStyle())
+                    .storyZoomSource(hero.id)
                     .locked(paywall)
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             }

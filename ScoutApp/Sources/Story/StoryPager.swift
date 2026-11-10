@@ -11,6 +11,7 @@ struct WebLink: Identifiable {
 /// previous one; swipe from the left edge to go back.
 struct StoryPager: View {
     @EnvironmentObject private var store: NewsStore
+    @ObservedObject private var speaker = Speaker.shared
     let route: StoryRoute
     @State private var current: String?
     @State private var reading: WebLink?
@@ -53,43 +54,59 @@ struct StoryPager: View {
         .navigationTitle(story?.outletName ?? "Story")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        .toolbar(.hidden, for: .tabBar)
+        // the tab bar stays, so it's there straight away when you go back
+        .onAppear { speaker.storyPagesOpen += 1 }
+        .onDisappear { speaker.storyPagesOpen = max(0, speaker.storyPagesOpen - 1) }
         .toolbar {
             if let story {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button {
-                        withAnimation(.snappy) { store.toggleSaved(story) }
+                    // listen to the story, in the accent; saving and sharing sit in the menu
+                    StoryListenButton(story: story)
+                    Menu {
+                        Button {
+                            withAnimation(.snappy) { store.toggleSaved(story) }
+                        } label: {
+                            Label(store.isSaved(story.id) ? "Remove from Saved" : "Save",
+                                  systemImage: store.isSaved(story.id) ? "bookmark.slash" : "bookmark")
+                        }
+                        if let url = story.lead?.url {
+                            ShareLink(item: url, subject: Text(story.title)) { Label("Share", systemImage: "square.and.arrow.up") }
+                        }
                     } label: {
-                        Image(systemName: store.isSaved(story.id) ? "bookmark.fill" : "bookmark")
-                            .contentTransition(.symbolEffect(.replace))
-                    }
-                    .accessibilityLabel(store.isSaved(story.id) ? "Remove from Saved" : "Save")
-                    if let url = story.lead?.url {
-                        ShareLink(item: url, subject: Text(story.title)) { Image(systemName: "square.and.arrow.up") }
+                        Image(systemName: "ellipsis.circle")
                     }
                 }
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if let story, let url = story.lead?.url {
-                Button { reading = WebLink(url: url) } label: {
-                    HStack(spacing: 8) {
-                        Favicon(host: story.lead?.host, size: 16)
-                        Text("Read on \(story.outletName)").lineLimit(1)
-                        Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .bold))
+            // Read on the outlet's site; while something plays, it moves over for the player
+            let playingNow = speaker.now != nil
+            HStack(spacing: 8) {
+                if let story, let url = story.lead?.url {
+                    Button { reading = WebLink(url: url) } label: {
+                        HStack(spacing: 8) {
+                            Favicon(host: story.lead?.host, size: 16)
+                            Text(playingNow ? story.outletName : "Read on \(story.outletName)").lineLimit(1)
+                            Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .bold))
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.text)
+                        .padding(.horizontal, 14)
+                        .frame(maxWidth: playingNow ? 150 : .infinity)
+                        .frame(height: 50)
+                        .scoutGlass(Capsule())
                     }
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.background)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Theme.ink, in: Capsule())
+                    .buttonStyle(PressStyle())
+                    .accessibilityLabel("Read on \(story.outletName)")
                 }
-                .buttonStyle(PressStyle())
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
-                .background(Theme.background.opacity(0.94).ignoresSafeArea())
+                if playingNow {
+                    NowPlayingBar(compact: true)
+                }
             }
+            .padding(.horizontal, Design.sideMargin + 6)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+            .animation(.snappy, value: playingNow)
         }
         .sheet(item: $reading) { link in
             SafariView(url: link.url).ignoresSafeArea()

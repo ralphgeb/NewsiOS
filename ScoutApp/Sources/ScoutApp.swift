@@ -107,18 +107,26 @@ struct RootView: View {
         TabView(selection: $tab) {
             // Inside each tab, controls stay in the ink; only the tab bar uses the accent.
             TodayView(showSettings: $showSettings)
+                .nowPlayingInset()
+                .storyZoomScope()
                 .tint(Theme.ink)
                 .tabItem { Label("Today", systemImage: "newspaper") }
                 .tag(0)
             NewsView(showSettings: $showSettings)
+                .nowPlayingInset()
+                .storyZoomScope()
                 .tint(Theme.ink)
                 .tabItem { Label("Briefings", systemImage: "list.bullet.rectangle.portrait") }
                 .tag(1)
             StocksView(showSettings: $showSettings)
+                .nowPlayingInset()
+                .storyZoomScope()
                 .tint(Theme.ink)
                 .tabItem { Label("Stocks", systemImage: "chart.line.uptrend.xyaxis") }
                 .tag(2)
             HistoryView(showSettings: $showSettings)
+                .nowPlayingInset()
+                .storyZoomScope()
                 .tint(Theme.ink)
                 .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
                 .tag(3)

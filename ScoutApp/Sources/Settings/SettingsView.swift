@@ -132,6 +132,7 @@ struct SettingsView: View {
     @State private var showPlus = false
     @State private var previewNote = false
     @State private var currentIcon: String?
+    @AppStorage(ListenVisual.key) private var listenVisual = ListenVisual.bars.rawValue
 
     var body: some View {
         NavigationStack {
@@ -142,6 +143,21 @@ struct SettingsView: View {
                 appearanceSection
                 iconSection
                 todaySection
+                Section {
+                    Picker("While playing", selection: $listenVisual) {
+                        ForEach(ListenVisual.allCases) { v in Text(v.title).tag(v.rawValue) }
+                    }
+                    HStack {
+                        Text("Preview").foregroundStyle(Theme.secondary)
+                        Spacer()
+                        PlaybackVisual(style: ListenVisual(rawValue: listenVisual) ?? .bars, progress: 0.4, size: 22)
+                    }
+                } header: {
+                    Text("Listening")
+                } footer: {
+                    Text("How the sound is drawn on the play buttons and the player while a briefing or story plays.")
+                }
+                .listRowBackground(Theme.card)
                 Section {
                     if !hasPlus {
                         Button("Restore purchases") { Task { await PlusStore.shared.restore() } }
