@@ -4,11 +4,11 @@ import WidgetKit
 
 /// The voice the Listen widget plays in (touch and hold › Edit Widget).
 enum ListenVoice: String, AppEnum {
-    case chirp, wavenet, phone
+    case chirp, wavenet, standard
 
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Voice"
     static var caseDisplayRepresentations: [ListenVoice: DisplayRepresentation] = [
-        .chirp: "Chirp 3: HD", .wavenet: "WaveNet", .phone: "iPhone voice",
+        .chirp: "Chirp 3: HD", .wavenet: "WaveNet", .standard: "Standard",
     ]
 }
 

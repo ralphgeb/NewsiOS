@@ -8,8 +8,10 @@ struct PlayBriefingIntent: AudioPlaybackIntent {
 
     /// Tech, Finance, World or Fashion.
     @Parameter(title: "Section") var section: String
-    /// "chirp" (Chirp 3: HD), "wavenet", or "phone" for the iPhone's own voice.
+    /// "chirp" (Chirp 3: HD), "wavenet" or "standard".
     @Parameter(title: "Voice") var voice: String
+
+    static var openAppWhenRun = false
 
     init() {}
 

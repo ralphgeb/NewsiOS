@@ -68,6 +68,15 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         updateNowPlaying()
     }
 
+    /// Waits (up to 15 seconds) until a recording is really playing.
+    func waitUntilSounding() async {
+        for _ in 0..<60 {
+            guard let player else { return }
+            if player.timeControlStatus == .playing { return }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+    }
+
     func toggle() {
         guard playing != nil else { return }
         if let player {
@@ -169,31 +178,42 @@ struct ListenButton: View {
     }
 }
 
-/// A briefing's Listen row: the phone's voice, and the two recorded voices to compare
-/// (WaveNet and Chirp 3: HD) once the morning's recordings are ready.
+/// A briefing's Listen row: three recorded voices to compare (Google's Standard, WaveNet and
+/// Chirp 3: HD). If a recording isn't ready yet, the phone reads the briefing instead.
 struct BriefingListen: View {
     let topic: Topic
     let brief: SectionBrief
     @ObservedObject private var speaker = Speaker.shared
     @State private var index: AudioIndex?
 
+    static let voices: [(id: String, label: String)] = [("standard", "Standard"), ("wavenet", "WaveNet"), ("chirp", "Chirp HD")]
+
     var body: some View {
         let base = "brief-\(topic.rawValue)-\(brief.generated?.timeIntervalSince1970 ?? 0)"
-        // a recording is for this briefing when its title matches
-        let recorded = index?.sections[topic.rawValue]?.title == brief.title
-        HStack(spacing: 6) {
-            chip(base + "-phone", "Phone", "iphone") {
-                speaker.play(base + "-phone", title: "\(topic.title) briefing", parts: Self.parts(brief))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "headphones").font(.system(size: 11, weight: .bold))
+                Text("Listen to this briefing").font(.system(size: 11, weight: .semibold)).tracking(0.6).textCase(.uppercase)
             }
-            if recorded, let url = index?.url(topic.rawValue, "wavenet") {
-                chip(base + "-wavenet", "WaveNet", "waveform") { speaker.play(base + "-wavenet", title: "\(topic.title) briefing", url: url) }
+            .foregroundStyle(Theme.text.opacity(0.55))
+            HStack(spacing: 6) {
+                ForEach(Self.voices, id: \.id) { v in
+                    chip(base + "-" + v.id, v.label) { await play(base + "-" + v.id, voice: v.id) }
+                }
             }
-            if recorded, let url = index?.url(topic.rawValue, "chirp") {
-                chip(base + "-chirp", "Chirp HD", "waveform.badge.plus") { speaker.play(base + "-chirp", title: "\(topic.title) briefing", url: url) }
-            }
-            Spacer(minLength: 0)
         }
         .task { index = await AudioIndex.load() }
+    }
+
+    private func play(_ id: String, voice: String) async {
+        let title = "\(topic.title) briefing"
+        if speaker.playing == id { speaker.toggle(); return }
+        if index?.url(topic.rawValue, voice) == nil { index = await AudioIndex.load() }
+        if let url = index?.url(topic.rawValue, voice) {
+            speaker.play(id, title: title, url: url)
+        } else {
+            speaker.play(id, title: title, parts: Self.parts(brief))
+        }
     }
 
     static func parts(_ brief: SectionBrief) -> [String] {
@@ -201,15 +221,16 @@ struct BriefingListen: View {
             + (brief.highlights.isEmpty ? brief.points.map(\.line) : brief.highlights.map { $0.label.isEmpty ? $0.text : "\($0.label). \($0.text)" })
     }
 
-    private func chip(_ id: String, _ label: String, _ symbol: String, action: @escaping () -> Void) -> some View {
+    private func chip(_ id: String, _ label: String, action: @escaping () async -> Void) -> some View {
         let on = speaker.isPlaying(id)
-        return Button(action: action) {
+        return Button { Task { await action() } } label: {
             HStack(spacing: 5) {
                 Image(systemName: on ? "pause.fill" : "play.fill").font(.system(size: 10, weight: .bold))
                 Text(label)
             }
-            .font(.system(size: 12.5, weight: .semibold))
-            .padding(.horizontal, 11).frame(height: 30)
+            .font(.system(size: 13, weight: .semibold))
+            .lineLimit(1).minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity).frame(height: 36)
             .background(on ? Theme.ink : Theme.track, in: Capsule())
             .foregroundStyle(on ? Theme.background : Theme.text)
         }
@@ -218,8 +239,9 @@ struct BriefingListen: View {
     }
 }
 
-/// What the Listen widget's buttons do in the app: the recording in the chosen voice when the
-/// morning's is ready, the phone's voice reading the briefing otherwise.
+/// What the Listen widget's buttons do in the app: the recording in the chosen voice, or the
+/// phone's voice reading the briefing when there's no recording yet. It waits until the sound has
+/// actually started, so iOS keeps the app playing in the background.
 @MainActor
 enum PlayBriefing {
     static func run(section: String, voice: String) async {
@@ -227,12 +249,13 @@ enum PlayBriefing {
         let briefing = Feed.cached(Feed.briefing).flatMap(Feed.decodeBriefing)
         let brief = briefing?.section(topic)
         let id = "brief-\(section)-\(brief?.generated?.timeIntervalSince1970 ?? 0)-\(voice)"
-        if voice != "phone", let index = await AudioIndex.load(),
-           brief == nil || index.sections[section]?.title == brief?.title,
-           let url = index.url(section, voice) {
-            Speaker.shared.play(id, title: "\(topic.title) briefing", url: url)
+        let speaker = Speaker.shared
+        if speaker.playing == id { speaker.toggle(); return }
+        if let url = await AudioIndex.load()?.url(section, voice) {
+            speaker.play(id, title: "\(topic.title) briefing", url: url)
+            await speaker.waitUntilSounding()
         } else if let brief {
-            Speaker.shared.play(id, title: "\(topic.title) briefing", parts: BriefingListen.parts(brief))
+            speaker.play(id, title: "\(topic.title) briefing", parts: BriefingListen.parts(brief))
         }
     }
 }
