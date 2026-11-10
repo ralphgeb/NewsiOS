@@ -10,22 +10,32 @@ struct ListenConfig: WidgetConfigurationIntent {
     var section: BriefingSection
 }
 
-/// The up and down arrows: move the widget to the next or previous section's briefing.
+/// The up and down arrows: move one widget to the next or previous section's briefing. Each
+/// widget keeps its own page (by its size and the section picked in Edit Widget), so two Listen
+/// widgets don't move together.
 struct ListenStepIntent: AppIntent {
     static var title: LocalizedStringResource = "Next briefing"
     static var isDiscoverable = false
-    static let key = "listen.widget.topic"
 
+    /// Where this widget's page is kept.
+    @Parameter(title: "Widget") var slot: String
+    /// The section it shows now.
+    @Parameter(title: "Section") var current: String
     @Parameter(title: "Step") var step: Int
 
     init() {}
-    init(step: Int) { self.step = step }
+    init(slot: String, current: Topic, step: Int) {
+        self.slot = slot
+        self.current = current.rawValue
+        self.step = step
+    }
+
+    static func key(_ slot: String) -> String { "listen.widget.\(slot)" }
 
     func perform() async throws -> some IntentResult {
         let all = Topic.allCases
-        let now = Shared.defaults.string(forKey: Self.key).flatMap(Topic.init(rawValue:)) ?? .tech
-        let i = all.firstIndex(of: now) ?? 0
-        Shared.defaults.set(all[(i + step + all.count) % all.count].rawValue, forKey: Self.key)
+        let i = all.firstIndex { $0.rawValue == current } ?? 0
+        Shared.defaults.set(all[(i + step + all.count) % all.count].rawValue, forKey: Self.key(slot))
         return .result()
     }
 }
@@ -34,6 +44,8 @@ struct ListenEntry: TimelineEntry {
     let date: Date
     /// The section shown now (the arrows move it).
     let topic: Topic
+    /// This widget's own page key (its size and configured section).
+    var slot: String = ""
     /// The section playing in Scout right now (shows pause on its button).
     var nowPlaying: String? = ListenState.paused ? nil : ListenState.section
     /// Each section's briefing headline.
@@ -51,17 +63,17 @@ struct ListenProvider: AppIntentTimelineProvider {
 
     func snapshot(for config: ListenConfig, in context: Context) async -> ListenEntry {
         Appearance.current = Appearance.load()
-        return entry(config, Feed.cached(Feed.briefing).flatMap(Feed.decodeBriefing))
+        return entry(config, context, Feed.cached(Feed.briefing).flatMap(Feed.decodeBriefing))
     }
 
     func timeline(for config: ListenConfig, in context: Context) async -> Timeline<ListenEntry> {
         Appearance.current = Appearance.load()
         var briefing = Feed.cached(Feed.briefing).flatMap(Feed.decodeBriefing)
         if let data = try? await Feed.fetchFresh(Feed.briefing), let b = Feed.decodeBriefing(data) { briefing = b }
-        return Timeline(entries: [entry(config, briefing)], policy: .after(.now.addingTimeInterval(60 * 60)))
+        return Timeline(entries: [entry(config, context, briefing)], policy: .after(.now.addingTimeInterval(60 * 60)))
     }
 
-    private func entry(_ config: ListenConfig, _ briefing: Briefing?) -> ListenEntry {
+    private func entry(_ config: ListenConfig, _ context: Context, _ briefing: Briefing?) -> ListenEntry {
         var titles: [String: String] = [:], summaries: [String: String] = [:]
         for t in Topic.allCases {
             guard let b = briefing?.section(t) else { continue }
@@ -69,8 +81,9 @@ struct ListenProvider: AppIntentTimelineProvider {
             summaries[t.rawValue] = Self.sentences(b.summary ?? "", 3)
         }
         // the section the arrows chose, else the one picked in Edit Widget
-        let topic = Shared.defaults.string(forKey: ListenStepIntent.key).flatMap(Topic.init(rawValue:)) ?? config.section.topic
-        return ListenEntry(date: .now, topic: topic, titles: titles, summaries: summaries)
+        let slot = "\(context.family == .systemSmall ? "small" : "medium")-\(config.section.rawValue)"
+        let topic = Shared.defaults.string(forKey: ListenStepIntent.key(slot)).flatMap(Topic.init(rawValue:)) ?? config.section.topic
+        return ListenEntry(date: .now, topic: topic, slot: slot, titles: titles, summaries: summaries)
     }
 
     /// The first `n` sentences of a briefing's summary.
@@ -140,7 +153,7 @@ struct ListenWidgetView: View {
 
     /// An up or down arrow with a big target, so it's easy to press.
     private func arrow(_ step: Int) -> some View {
-        Button(intent: ListenStepIntent(step: step)) {
+        Button(intent: ListenStepIntent(slot: entry.slot, current: topic, step: step)) {
             Image(systemName: step < 0 ? "chevron.up" : "chevron.down")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(text.opacity(0.7))
