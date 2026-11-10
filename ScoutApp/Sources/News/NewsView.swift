@@ -214,11 +214,15 @@ struct SectionCover: View {
     // The picture, the headline of the day and one paragraph.
     private var leadCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NavigationLink(value: lead.map { StoryRoute(id: $0.id, sequence: sequence) }) {
-                StoryImage(story: lead).frame(height: Design.briefingImage)
+            ZStack(alignment: .bottomLeading) {
+                NavigationLink(value: lead.map { StoryRoute(id: $0.id, sequence: sequence) }) {
+                    StoryImage(story: lead).frame(height: Design.briefingImage)
+                }
+                .buttonStyle(PressStyle())
+                .disabled(lead == nil)
+                // listen: on the picture, where it's easy to see
+                BriefingListen(topic: topic, brief: brief).padding(14)
             }
-            .buttonStyle(PressStyle())
-            .disabled(lead == nil)
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Circle().fill(Theme.accent).frame(width: 7, height: 7)
@@ -230,8 +234,6 @@ struct SectionCover: View {
                     Text(first).font(.system(size: 15)).lineSpacing(2).foregroundStyle(Theme.text.opacity(0.85))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                // listen: the phone's voice, or the two recorded voices to compare
-                BriefingListen(topic: topic, brief: brief).padding(.top, 2)
             }
             .padding(18)
         }

@@ -8,7 +8,7 @@ struct PlayBriefingIntent: AudioPlaybackIntent {
 
     /// Tech, Finance, World or Fashion.
     @Parameter(title: "Section") var section: String
-    /// "chirp" (Chirp 3: HD), "wavenet" or "standard".
+    /// "chirp" (Chirp 3: HD, the Aoede voice).
     @Parameter(title: "Voice") var voice: String
 
     static var openAppWhenRun = false

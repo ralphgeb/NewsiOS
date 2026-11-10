@@ -1,6 +1,7 @@
 import AVFoundation
 import MediaPlayer
 import SwiftUI
+import WidgetKit
 
 /// Reads briefings and story summaries aloud with the iPhone's own voices: free, on the phone,
 /// and it keeps going with the screen locked (with play and pause on the Lock Screen).
@@ -9,8 +10,16 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     static let shared = Speaker()
 
     /// What's being read ("story-<id>", "brief-Tech"…), nil when quiet.
-    @Published private(set) var playing: String?
-    @Published private(set) var paused = false
+    @Published private(set) var playing: String? { didSet { if oldValue != playing { share() } } }
+    @Published private(set) var paused = false { didSet { if oldValue != paused { share() } } }
+
+    /// Tells the Listen widget which briefing is playing, so its button shows pause.
+    private func share() {
+        let section = playing.flatMap { id in id.hasPrefix("brief-") ? id.split(separator: "-").dropFirst().first.map(String.init) : nil }
+        Shared.defaults.set(section, forKey: ListenState.sectionKey)
+        Shared.defaults.set(paused, forKey: ListenState.pausedKey)
+        WidgetCenter.shared.reloadTimelines(ofKind: ListenState.widgetKind)
+    }
 
     private let synth = AVSpeechSynthesizer()
     /// A recorded briefing (WaveNet or Chirp 3: HD) plays here instead of the phone's voice.
@@ -150,66 +159,72 @@ struct AudioIndex: Decodable {
     }
 }
 
-/// ▶︎ Listen / ❚❚ Pause, for a briefing card.
-struct ListenButton: View {
-    let id: String
-    let title: String
-    let parts: () -> [String]
-    @ObservedObject private var speaker = Speaker.shared
-
-    var body: some View {
-        let on = speaker.isPlaying(id)
-        Button {
-            speaker.play(id, title: title, parts: parts())
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: on ? "pause.fill" : "play.fill").font(.system(size: 11, weight: .bold))
-                Text(on ? "Pause" : (speaker.playing == id ? "Resume" : "Listen"))
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .padding(.horizontal, 12).frame(height: 30)
-            .background(on ? Theme.ink : Theme.track, in: Capsule())
-            .foregroundStyle(on ? Theme.background : Theme.text)
-            .contentTransition(.symbolEffect(.replace))
-        }
-        .buttonStyle(PressStyle())
-        .sensoryFeedback(.selection, trigger: on)
-        .accessibilityLabel(on ? "Pause reading" : "Listen to \(title)")
-    }
-}
-
-/// A briefing's Listen row: three recorded voices to compare (Google's Standard, WaveNet and
-/// Chirp 3: HD). If a recording isn't ready yet, the phone reads the briefing instead.
+/// The big Listen button that sits on a briefing's picture: the morning's recording in Google's
+/// Chirp 3: HD voice, or the phone's voice if the recording isn't ready yet.
 struct BriefingListen: View {
     let topic: Topic
     let brief: SectionBrief
     @ObservedObject private var speaker = Speaker.shared
     @State private var index: AudioIndex?
 
-    static let voices: [(id: String, label: String)] = [("standard", "Standard"), ("wavenet", "WaveNet"), ("chirp", "Chirp HD")]
+    static let voice = "chirp"
+
+    private var id: String { "brief-\(topic.rawValue)-\(brief.generated?.timeIntervalSince1970 ?? 0)-\(Self.voice)" }
+
+    /// About how long the briefing takes to hear.
+    private var minutes: Int {
+        let chars = Self.parts(brief).reduce(0) { $0 + $1.count }
+        return max(1, Int((Double(chars) / 15.5 / 60).rounded()))
+    }
 
     var body: some View {
-        let base = "brief-\(topic.rawValue)-\(brief.generated?.timeIntervalSince1970 ?? 0)"
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "headphones").font(.system(size: 11, weight: .bold))
-                Text("Listen to this briefing").font(.system(size: 11, weight: .semibold)).tracking(0.6).textCase(.uppercase)
-            }
-            .foregroundStyle(Theme.text.opacity(0.55))
-            HStack(spacing: 6) {
-                ForEach(Self.voices, id: \.id) { v in
-                    chip(base + "-" + v.id, v.label) { await play(base + "-" + v.id, voice: v.id) }
+        let on = speaker.isPlaying(id)
+        let started = speaker.playing == id
+        Button {
+            Task { await play() }
+        } label: {
+            HStack(spacing: 11) {
+                ZStack {
+                    Circle().fill(Theme.accent)
+                    Image(systemName: on ? "pause.fill" : "play.fill")
+                        .font(.system(size: 15, weight: .black))
+                        .foregroundStyle(.white)
+                        .offset(x: on ? 0 : 1.5)
+                        .contentTransition(.symbolEffect(.replace))
                 }
+                .frame(width: 40, height: 40)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(on ? "Playing" : started ? "Paused" : "Listen to the briefing")
+                        .font(.system(size: 15, weight: .bold))
+                    HStack(spacing: 5) {
+                        Image(systemName: "waveform")
+                            .symbolEffect(.variableColor.iterative, isActive: on)
+                        Text("\(minutes) min")
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .opacity(0.75)
+                }
+                .foregroundStyle(.white)
+                .padding(.trailing, 8)
             }
+            .padding(5)
+            .background(.ultraThinMaterial.opacity(0.9), in: Capsule())
+            .background(Color.black.opacity(0.35), in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.18), lineWidth: 0.5))
+            .environment(\.colorScheme, .dark)
+            .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
         }
+        .buttonStyle(PressStyle())
+        .sensoryFeedback(.impact(weight: .medium), trigger: on)
+        .accessibilityLabel(on ? "Pause the \(topic.title) briefing" : "Listen to the \(topic.title) briefing")
         .task { index = await AudioIndex.load() }
     }
 
-    private func play(_ id: String, voice: String) async {
+    private func play() async {
         let title = "\(topic.title) briefing"
         if speaker.playing == id { speaker.toggle(); return }
-        if index?.url(topic.rawValue, voice) == nil { index = await AudioIndex.load() }
-        if let url = index?.url(topic.rawValue, voice) {
+        if index?.url(topic.rawValue, Self.voice) == nil { index = await AudioIndex.load() }
+        if let url = index?.url(topic.rawValue, Self.voice) {
             speaker.play(id, title: title, url: url)
         } else {
             speaker.play(id, title: title, parts: Self.parts(brief))
@@ -220,23 +235,6 @@ struct BriefingListen: View {
         [brief.title, NewsStore.paragraphs(brief.summary).first ?? ""]
             + (brief.highlights.isEmpty ? brief.points.map(\.line) : brief.highlights.map { $0.label.isEmpty ? $0.text : "\($0.label). \($0.text)" })
     }
-
-    private func chip(_ id: String, _ label: String, action: @escaping () async -> Void) -> some View {
-        let on = speaker.isPlaying(id)
-        return Button { Task { await action() } } label: {
-            HStack(spacing: 5) {
-                Image(systemName: on ? "pause.fill" : "play.fill").font(.system(size: 10, weight: .bold))
-                Text(label)
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .lineLimit(1).minimumScaleFactor(0.8)
-            .frame(maxWidth: .infinity).frame(height: 36)
-            .background(on ? Theme.ink : Theme.track, in: Capsule())
-            .foregroundStyle(on ? Theme.background : Theme.text)
-        }
-        .buttonStyle(PressStyle())
-        .accessibilityLabel(on ? "Pause" : "Listen with the \(label) voice")
-    }
 }
 
 /// What the Listen widget's buttons do in the app: the recording in the chosen voice, or the
@@ -244,7 +242,7 @@ struct BriefingListen: View {
 /// actually started, so iOS keeps the app playing in the background.
 @MainActor
 enum PlayBriefing {
-    static func run(section: String, voice: String) async {
+    static func run(section: String, voice: String = BriefingListen.voice) async {
         guard let topic = Topic(rawValue: section) else { return }
         let briefing = Feed.cached(Feed.briefing).flatMap(Feed.decodeBriefing)
         let brief = briefing?.section(topic)

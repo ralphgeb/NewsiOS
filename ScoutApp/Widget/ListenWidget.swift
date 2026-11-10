@@ -2,30 +2,19 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-/// The voice the Listen widget plays in (touch and hold › Edit Widget).
-enum ListenVoice: String, AppEnum {
-    case chirp, wavenet, standard
-
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Voice"
-    static var caseDisplayRepresentations: [ListenVoice: DisplayRepresentation] = [
-        .chirp: "Chirp 3: HD", .wavenet: "WaveNet", .standard: "Standard",
-    ]
-}
-
 struct ListenConfig: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Listen"
     static var description = IntentDescription("Play a briefing without opening Scout.")
 
     @Parameter(title: "Section (small widget)", default: .tech)
     var section: BriefingSection
-    @Parameter(title: "Voice", default: .chirp)
-    var voice: ListenVoice
 }
 
 struct ListenEntry: TimelineEntry {
     let date: Date
     let section: BriefingSection
-    let voice: ListenVoice
+    /// The section playing in Scout right now (shows pause on its button).
+    var nowPlaying: String? = ListenState.paused ? nil : ListenState.section
     /// Each section's briefing headline.
     let titles: [String: String]
     var appearance: Appearance = Appearance.load()
@@ -33,7 +22,7 @@ struct ListenEntry: TimelineEntry {
 
 struct ListenProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> ListenEntry {
-        ListenEntry(date: .now, section: .tech, voice: .chirp, titles: [:])
+        ListenEntry(date: .now, section: .tech, titles: [:])
     }
 
     func snapshot(for config: ListenConfig, in context: Context) async -> ListenEntry {
@@ -51,7 +40,7 @@ struct ListenProvider: AppIntentTimelineProvider {
     private func entry(_ config: ListenConfig, _ briefing: Briefing?) -> ListenEntry {
         var titles: [String: String] = [:]
         for t in Topic.allCases { titles[t.rawValue] = briefing?.section(t)?.title }
-        return ListenEntry(date: .now, section: config.section, voice: config.voice, titles: titles)
+        return ListenEntry(date: .now, section: config.section, titles: titles)
     }
 }
 
@@ -94,12 +83,15 @@ struct ListenWidgetView: View {
     }
 
     private func play(_ topic: Topic, size: CGFloat) -> some View {
-        Button(intent: PlayBriefingIntent(section: topic.rawValue, voice: entry.voice.rawValue)) {
-            Image(systemName: "play.fill")
+        let on = entry.nowPlaying == topic.rawValue
+        return Button(intent: PlayBriefingIntent(section: topic.rawValue, voice: "chirp")) {
+            Image(systemName: on ? "pause.fill" : "play.fill")
                 .font(.system(size: size * 0.38, weight: .bold))
-                .foregroundStyle(palette.background.color)
+                .foregroundStyle(.white)
+                .offset(x: on ? 0 : size * 0.03)
                 .frame(width: size, height: size)
-                .background(ink, in: Circle())
+                .background(accent, in: Circle())
+                .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.plain)
     }
