@@ -108,24 +108,28 @@ struct RootView: View {
         TabView(selection: $tab) {
             // Inside each tab, controls stay in the ink; only the tab bar uses the accent.
             TodayView(showSettings: $showSettings)
+                .storyTab(0)
                 .nowPlayingInset()
                 .storyZoomScope()
                 .tint(Theme.ink)
                 .tabItem { Label("Today", systemImage: "newspaper") }
                 .tag(0)
             NewsView(showSettings: $showSettings)
+                .storyTab(1)
                 .nowPlayingInset()
                 .storyZoomScope()
                 .tint(Theme.ink)
                 .tabItem { Label("Briefings", systemImage: "list.bullet.rectangle.portrait") }
                 .tag(1)
             StocksView(showSettings: $showSettings)
+                .storyTab(2)
                 .nowPlayingInset()
                 .storyZoomScope()
                 .tint(Theme.ink)
                 .tabItem { Label("Stocks", systemImage: "chart.line.uptrend.xyaxis") }
                 .tag(2)
             HistoryView(showSettings: $showSettings)
+                .storyTab(3)
                 .nowPlayingInset()
                 .storyZoomScope()
                 .tint(Theme.ink)
@@ -140,6 +144,7 @@ struct RootView: View {
         // the tab you're on is highlighted in the accent
         .tint(Theme.accent)
         .sensoryFeedback(.selection, trigger: tab)
+        .onChange(of: tab, initial: true) { _, t in Speaker.shared.currentTab = t }
         .task { await store.refreshIfStale() }
         .sheet(isPresented: $showPlus) { PlusSheet(reason: "Listening to the briefings is part of Scout Plus.") }
         .task { Plus.share() }
@@ -190,11 +195,39 @@ private struct PlayerTabBar: ViewModifier {
             // the tab bar stays open, and shrinks to a circle beside the player only while audio plays
             content
                 .tabBarMinimizeBehavior(speaker.now != nil ? .onScrollDown : .never)
-                .tabViewBottomAccessory(isEnabled: speaker.now != nil && speaker.storyPagesOpen == 0) { NowPlayingAccessory() }
+                .tabViewBottomAccessory(isEnabled: speaker.now != nil && !speaker.storyOnScreen) { NowPlayingAccessory() }
         } else if #available(iOS 26, *) {
             content.tabBarMinimizeBehavior(speaker.now != nil ? .onScrollDown : .never)
         } else {
             content
         }
+    }
+}
+
+private struct ScoutTabKey: EnvironmentKey { static let defaultValue = 0 }
+
+extension EnvironmentValues {
+    /// Which tab a page is in (0 Today, 1 Briefings, 2 Stocks, 3 History).
+    var scoutTab: Int {
+        get { self[ScoutTabKey.self] }
+        set { self[ScoutTabKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// A tab hides its tab bar while one of its stories is open. It's set here, on the tab, rather
+    /// than on the story, so the tab bar comes straight back as soon as you start going back.
+    func storyTab(_ tab: Int) -> some View { modifier(StoryTab(tab: tab)) }
+}
+
+private struct StoryTab: ViewModifier {
+    let tab: Int
+    @ObservedObject private var speaker = Speaker.shared
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.scoutTab, tab)
+            .toolbar(speaker.storyPages[tab, default: 0] > 0 ? .hidden : .visible, for: .tabBar)
+            .animation(.snappy(duration: 0.25), value: speaker.storyPages[tab, default: 0] > 0)
     }
 }

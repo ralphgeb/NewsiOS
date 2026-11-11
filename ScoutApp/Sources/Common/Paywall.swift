@@ -207,8 +207,8 @@ struct PlusSheet: View {
             }
             VStack(alignment: .leading, spacing: 8) {
                 perk("Listen to every briefing and story")
-                perk("Every story in For you and every section")
-                perk("Follow any stock, with its AI summary")
+                perk("Access to all news summaries")
+                perk("Access to all stock insights")
                 perk("Your own colours, themes and app icons")
             }
             .padding(.horizontal, 8)

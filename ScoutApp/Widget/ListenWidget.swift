@@ -141,8 +141,8 @@ struct ListenWidgetView: View {
     @ViewBuilder private func play(size: CGFloat) -> some View {
         if entry.plus { playButton(size: size) } else {
             Link(destination: URL(string: "scout://plus")!) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: size * 0.34, weight: .bold))
+                Image(systemName: "play.fill")
+                    .font(.system(size: size * 0.38, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: size, height: size)
                     .background(accent, in: Circle())

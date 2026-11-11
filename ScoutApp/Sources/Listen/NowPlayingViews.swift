@@ -284,7 +284,7 @@ private struct NowPlayingInset: ViewModifier {
             content
         } else {
             content.safeAreaInset(edge: .bottom) {
-                if speaker.now != nil, speaker.storyPagesOpen == 0 {
+                if speaker.now != nil, !speaker.storyOnScreen {
                     NowPlayingBar()
                         .padding(.horizontal, Design.sideMargin + 4)
                         .padding(.bottom, 6)

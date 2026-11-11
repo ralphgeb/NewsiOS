@@ -190,7 +190,8 @@ struct NewsView: View {
                 out.append(Chunk(id: "h-" + list[i].id, hero: list[i]))
                 i += 1
             }
-            let end = min(i + 8, list.count)
+            // the first group is the free one: six stories
+            let end = min(i + (out.isEmpty ? 6 : 8), list.count)
             if i < end { out.append(Chunk(id: "r-" + list[i].id, rows: Array(list[i..<end]))) }
             i = end
         }

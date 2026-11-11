@@ -346,7 +346,7 @@ struct WeatherCard: View {
     @EnvironmentObject private var weather: WeatherModel
     @AppStorage("weather.showRain") private var showRain = false
     /// Tap the top of the card to fold away the chart, like the metro card, so more news fits.
-    @AppStorage("weather.compact") private var compact = false
+    @AppStorage("weather.compact") private var compact = true   // starts small
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {

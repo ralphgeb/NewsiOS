@@ -32,8 +32,14 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     @Published private(set) var progress: Double = 0
     @Published private(set) var elapsed: Double = 0
     @Published private(set) var duration: Double = 0
-    /// Story pages on screen: the mini player above the tab bar steps aside for theirs.
-    @Published var storyPagesOpen = 0
+    /// Story pages open in each tab: there the tab bar steps aside for the story's own bar.
+    @Published private(set) var storyPages: [Int: Int] = [:]
+    /// The tab on screen.
+    @Published var currentTab = 0
+    var storyOnScreen: Bool { storyPages[currentTab, default: 0] > 0 }
+    func storyPage(in tab: Int, open: Bool) {
+        storyPages[tab] = max(0, storyPages[tab, default: 0] + (open ? 1 : -1))
+    }
 
     /// Tells the Listen widget which briefing is playing, so its button shows pause.
     private func share() {
@@ -51,14 +57,43 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     private var lastItem: AVPlayerItem?
     private var artwork: MPMediaItemArtwork?
     private var storyTask: Task<Void, Never>?
+    /// Watches the player itself, so pause and play from anywhere (Control Centre, headphones, a
+    /// phone call) keep the buttons in the app right.
+    private var statusObservation: NSKeyValueObservation?
 
     private override init() {
         super.init()
         synth.delegate = self
+        // Control Centre, the Lock Screen and headphones: play and pause do exactly that (never a
+        // toggle, which could do the opposite if the app and the player disagreed)
         let center = MPRemoteCommandCenter.shared()
-        center.pauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.toggle() }; return .success }
-        center.playCommand.addTarget { [weak self] _ in Task { @MainActor in self?.toggle() }; return .success }
+        for c in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.skipForwardCommand,
+                  center.skipBackwardCommand, center.changePlaybackPositionCommand] { c.isEnabled = true }
+        center.pauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.pause() }
+            return .success
+        }
+        center.playCommand.addTarget { [weak self] _ in
+            Task { @MainActor in self?.resume() }
+            return .success
+        }
         center.togglePlayPauseCommand.addTarget { [weak self] _ in Task { @MainActor in self?.toggle() }; return .success }
+        // a phone call or another app's sound pauses Scout; when it ends, Scout carries on
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+            let info = note.userInfo ?? [:]
+            let type = (info[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init(rawValue:))
+            let options = (info[AVAudioSessionInterruptionOptionKey] as? UInt).map(AVAudioSession.InterruptionOptions.init(rawValue:))
+            Task { @MainActor in
+                guard let self, self.playing != nil else { return }
+                if type == .began { self.pause() }
+                else if type == .ended, options?.contains(.shouldResume) == true { self.resume() }
+            }
+        }
+        // headphones unplugged: pause, as iOS apps do
+        NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
+            let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
+            Task { @MainActor in if reason == .oldDeviceUnavailable { self?.pause() } }
+        }
         center.skipForwardCommand.preferredIntervals = [15]
         center.skipBackwardCommand.preferredIntervals = [15]
         center.skipForwardCommand.addTarget { [weak self] _ in Task { @MainActor in self?.skip(15) }; return .success }
@@ -155,13 +190,21 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     func toggle() {
-        guard playing != nil else { return }
-        if let player {
-            if paused { player.play() } else { player.pause() }
-        } else {
-            if paused { synth.continueSpeaking() } else { synth.pauseSpeaking(at: .word) }
-        }
-        paused.toggle()
+        if paused { resume() } else { pause() }
+    }
+
+    func pause() {
+        guard playing != nil, !paused else { return }
+        if let player { player.pause() } else { synth.pauseSpeaking(at: .word) }
+        paused = true
+        updateNowPlaying()
+    }
+
+    func resume() {
+        guard playing != nil, paused else { return }
+        activateSession()      // the session may have been taken by a call or another app
+        if let player { player.play() } else { synth.continueSpeaking() }
+        paused = false
         updateNowPlaying()
     }
 
@@ -237,6 +280,16 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] t in
             Task { @MainActor in self?.tick(t) }
         }
+        statusObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] p, _ in
+            let status = p.timeControlStatus
+            let hasItem = p.currentItem != nil
+            Task { @MainActor in
+                guard let self, self.player === p, !self.preparing, hasItem else { return }
+                // the player is the truth: paused from anywhere shows as paused here too
+                if status == .playing, self.paused { self.paused = false; self.updateNowPlaying() }
+                if status == .paused, !self.paused { self.paused = true; self.updateNowPlaying() }
+            }
+        }
         self.player = player
         player.play()
     }
@@ -253,6 +306,8 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     private func finish() {
+        statusObservation?.invalidate()
+        statusObservation = nil
         if let timeObserver, let player { player.removeTimeObserver(timeObserver) }
         timeObserver = nil
         player = nil
@@ -278,7 +333,7 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         ]
         if duration > 0 {
             info[MPMediaItemPropertyPlaybackDuration] = duration
-            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player?.currentTime().seconds ?? elapsed
         }
         if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -461,13 +516,7 @@ struct BriefingListen: View {
             if on { PlaybackVisual(style: .pulse, playing: true, progress: speaker.progress, size: 74) }
             icon(on, size: 58)
                 .overlay(Circle().strokeBorder(Theme.card, lineWidth: 3))
-                .overlay(alignment: .topTrailing) {
-                    if !hasPlus {
-                        Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.text)
-                            .frame(width: 20, height: 20).background(Theme.card, in: Circle())
-                            .offset(x: 2, y: -2)
-                    }
-                }
+
         }
         .frame(width: 76, height: 76)
         .shadow(color: .black.opacity(0.2), radius: 10, y: 4)

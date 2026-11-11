@@ -12,6 +12,10 @@ struct WebLink: Identifiable {
 struct StoryPager: View {
     @EnvironmentObject private var store: NewsStore
     @ObservedObject private var speaker = Speaker.shared
+    @Environment(\.scoutTab) private var tab
+    @Environment(\.isPresented) private var isPresented
+    /// Counted as open in its tab (once, however it's left).
+    @State private var counted = false
     let route: StoryRoute
     @State private var current: String?
     @State private var reading: WebLink?
@@ -27,6 +31,12 @@ struct StoryPager: View {
     }
 
     private var story: Story? { store.story(current ?? route.id) }
+
+    private func leave() {
+        guard counted else { return }
+        counted = false
+        speaker.storyPage(in: tab, open: false)
+    }
 
     var body: some View {
         let list = ids
@@ -54,10 +64,11 @@ struct StoryPager: View {
         .navigationTitle(story?.outletName ?? "Story")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        // a story's own bottom bar (Read on, and the player) takes the tab bar's place
-        .toolbar(.hidden, for: .tabBar)
-        .onAppear { speaker.storyPagesOpen += 1 }
-        .onDisappear { speaker.storyPagesOpen = max(0, speaker.storyPagesOpen - 1) }
+        // a story's own bottom bar (Read on, and the player) takes the tab bar's place: the tab
+        // hides its bar while the story is open, and shows it again the moment you go back
+        .onAppear { if !counted { counted = true; speaker.storyPage(in: tab, open: true) } }
+        .onChange(of: isPresented) { _, shown in if !shown { leave() } }
+        .onDisappear { leave() }
         .toolbar {
             if let story {
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -110,7 +121,8 @@ struct StoryPager: View {
             .frame(height: 50)
             .padding(.horizontal, Design.sideMargin + 6)
             .padding(.top, 8)
-            .padding(.bottom, 6)
+            // down where the tab bar sits
+            .padding(.bottom, -6)
             .animation(.snappy, value: playingNow)
         }
         .sheet(item: $reading) { link in

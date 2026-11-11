@@ -26,12 +26,14 @@ struct StockDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(q)
-                chartCard(q)
-                stats(q)
-                aiCard
-                    .locked(paywall)
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                headlines
+                // without Scout Plus the stock's details are blurred under one lock
+                VStack(alignment: .leading, spacing: 16) {
+                    chartCard(q)
+                    stats(q)
+                    aiCard
+                    headlines
+                }
+                .locked(paywall)
                 if !stories.isEmpty {
                     SectionHead(title: "In Scout", detail: "\(stories.count) stor\(stories.count == 1 ? "y" : "ies")")
                     // under the paywall preview: folded to two stories with one lock
