@@ -54,7 +54,8 @@ struct StoryPager: View {
         .navigationTitle(story?.outletName ?? "Story")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
-        // the tab bar stays, so it's there straight away when you go back
+        // a story's own bottom bar (Read on, and the player) takes the tab bar's place
+        .toolbar(.hidden, for: .tabBar)
         .onAppear { speaker.storyPagesOpen += 1 }
         .onDisappear { speaker.storyPagesOpen = max(0, speaker.storyPagesOpen - 1) }
         .toolbar {
@@ -79,30 +80,34 @@ struct StoryPager: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            // Read on the outlet's site; while something plays, it moves over for the player
+            // Read on the outlet's site; while something plays it takes a third and the player the rest
             let playingNow = speaker.now != nil
-            HStack(spacing: 8) {
-                if let story, let url = story.lead?.url {
-                    Button { reading = WebLink(url: url) } label: {
-                        HStack(spacing: 8) {
-                            Favicon(host: story.lead?.host, size: 16)
-                            Text(playingNow ? story.outletName : "Read on \(story.outletName)").lineLimit(1)
-                            Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .bold))
+            GeometryReader { g in
+                HStack(spacing: 8) {
+                    if let story, let url = story.lead?.url {
+                        Button { reading = WebLink(url: url) } label: {
+                            HStack(spacing: 7) {
+                                Favicon(host: story.lead?.host, size: 16)
+                                Text(playingNow ? story.outletName : "Read on \(story.outletName)").lineLimit(1)
+                                if !playingNow { Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .bold)) }
+                            }
+                            .font(.system(size: playingNow ? 13 : 15, weight: .semibold))
+                            .foregroundStyle(Theme.text)
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .scoutGlass(Capsule())
                         }
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.text)
-                        .padding(.horizontal, 14)
-                        .frame(maxWidth: playingNow ? 150 : .infinity)
-                        .frame(height: 50)
-                        .scoutGlass(Capsule())
+                        .buttonStyle(PressStyle())
+                        .frame(width: playingNow ? (g.size.width - 8) / 3 : g.size.width)
+                        .accessibilityLabel("Read on \(story.outletName)")
                     }
-                    .buttonStyle(PressStyle())
-                    .accessibilityLabel("Read on \(story.outletName)")
-                }
-                if playingNow {
-                    NowPlayingBar(compact: true)
+                    if playingNow {
+                        NowPlayingBar(look: .story, current: story?.id)
+                    }
                 }
             }
+            .frame(height: 50)
             .padding(.horizontal, Design.sideMargin + 6)
             .padding(.top, 8)
             .padding(.bottom, 6)

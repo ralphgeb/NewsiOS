@@ -148,69 +148,115 @@ struct PlaybackVisual: View {
     }
 }
 
-/// What's playing, with play/pause and close: above the tab bar, and beside Read on in a story.
+/// What's playing: tap it to go back to the story (or the briefing), with play/pause and a
+/// close button to stop. It sits beside the tab bar (iOS 26), above it, or in a story's bottom bar.
 struct NowPlayingBar: View {
-    var compact = false
+    enum Look { case floating, accessory, inline, story }
+    var look: Look = .floating
+    /// The story on screen (tapping the player there doesn't open it again).
+    var current: String? = nil
     @ObservedObject private var speaker = Speaker.shared
-    @AppStorage(ListenVisual.key) private var visualRaw = ListenVisual.bars.rawValue
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         if let now = speaker.now {
             let on = !speaker.paused
-            HStack(spacing: 10) {
-                thumb(now)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(now.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
-                    if speaker.preparing {
-                        Text("Getting it ready…").font(.system(size: 11)).foregroundStyle(Theme.secondary)
-                    } else if !compact {
-                        Text(now.subtitle).font(.system(size: 11)).foregroundStyle(Theme.secondary).lineLimit(1)
+            let small = look == .inline
+            HStack(spacing: small ? 8 : 10) {
+                Button { open(now) } label: {
+                    HStack(spacing: small ? 8 : 10) {
+                        thumb(now, size: small ? 28 : 36)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(now.title).font(.system(size: small ? 12.5 : 13, weight: .semibold))
+                                .foregroundStyle(Theme.text).lineLimit(1)
+                            if !small {
+                                Text(speaker.preparing ? "Getting it ready…" : now.subtitle)
+                                    .font(.system(size: 11)).foregroundStyle(Theme.secondary).lineLimit(1)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        if !small, !speaker.preparing {
+                            PlaybackVisual(style: .bars, playing: on, progress: speaker.progress, size: 16)
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
-                Spacer(minLength: 0)
-                if !compact || speaker.duration > 0 {
-                    PlaybackVisual(style: ListenVisual(rawValue: visualRaw) ?? .bars, playing: on && !speaker.preparing,
-                                   progress: speaker.progress, size: 18)
-                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(now.title)")
                 Button { speaker.toggle() } label: {
-                    Image(systemName: on ? "pause.fill" : "play.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
-                        .background(Theme.accent, in: Circle())
-                        .contentTransition(.symbolEffect(.replace))
+                    Group {
+                        if speaker.preparing {
+                            ProgressView().tint(.white).controlSize(.small)
+                        } else {
+                            Image(systemName: on ? "pause.fill" : "play.fill")
+                                .font(.system(size: small ? 12 : 14, weight: .bold))
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: small ? 28 : 34, height: small ? 28 : 34)
+                    .background(Theme.accent, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(on ? "Pause" : "Play")
-                if !compact {
-                    Button { withAnimation(.snappy) { speaker.stop() } } label: {
-                        Image(systemName: "xmark").font(.system(size: 12, weight: .bold)).foregroundStyle(Theme.secondary)
-                            .frame(width: 28, height: 32)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Stop")
+                Button { withAnimation(.snappy) { speaker.stop() } } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: small ? 11 : 12, weight: .bold))
+                        .foregroundStyle(Theme.secondary)
+                        .frame(width: small ? 24 : 30, height: 34)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Stop")
             }
-            .padding(.leading, 6).padding(.trailing, 8)
-            .frame(height: 50)
-            .scoutGlass(Capsule())
+            .padding(.leading, small ? 4 : 6).padding(.trailing, small ? 4 : 6)
+            .frame(height: small ? 40 : 50)
+            .modifier(BarBackground(glass: look == .floating || look == .story))
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
-    @ViewBuilder private func thumb(_ now: NowPlaying) -> some View {
+    /// Back to what's playing: the story, or the briefing's section.
+    private func open(_ now: NowPlaying) {
+        if let id = now.storyID {
+            if id != current, let url = URL(string: "scout://story/\(id)") { openURL(url) }
+        }
+        else if let section = now.section, let url = URL(string: "scout://news?section=\(section)") { openURL(url) }
+    }
+
+    @ViewBuilder private func thumb(_ now: NowPlaying, size: CGFloat) -> some View {
         Group {
             if let url = now.artwork {
                 RemoteImage(url: url) { ScoutPlaceholder() }
             } else {
                 ZStack {
                     Theme.accent.opacity(0.15)
-                    Image(systemName: "headphones").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.accent)
+                    Image(systemName: "headphones").font(.system(size: size * 0.4, weight: .semibold)).foregroundStyle(Theme.accent)
                 }
             }
         }
-        .frame(width: 38, height: 38)
-        .clipShape(Circle())
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+    }
+}
+
+/// Glass for a bar standing on its own; none inside the tab bar's accessory, which has its own.
+private struct BarBackground: ViewModifier {
+    let glass: Bool
+    func body(content: Content) -> some View {
+        if glass { content.scoutGlass(Capsule()) } else { content }
+    }
+}
+
+/// The player in the tab bar's accessory (iOS 26): beside the shrunken tab bar while you
+/// scroll, a full bar above it otherwise.
+@available(iOS 26, *)
+struct NowPlayingAccessory: View {
+    @Environment(\.tabViewBottomAccessoryPlacement) private var placement
+
+    var body: some View {
+        NowPlayingBar(look: placement == .inline ? .inline : .accessory)
+            .padding(.horizontal, 6)
     }
 }
 
@@ -229,18 +275,23 @@ extension View {
     }
 }
 
+/// Before iOS 26.1 (no tab bar accessory to switch on and off), the player floats above the tab bar.
 private struct NowPlayingInset: ViewModifier {
     @ObservedObject private var speaker = Speaker.shared
 
     func body(content: Content) -> some View {
-        content.safeAreaInset(edge: .bottom) {
-            if speaker.now != nil, speaker.storyPagesOpen == 0 {
-                NowPlayingBar()
-                    .padding(.horizontal, Design.sideMargin + 4)
-                    .padding(.bottom, 6)
+        if #available(iOS 26.1, *) {
+            content
+        } else {
+            content.safeAreaInset(edge: .bottom) {
+                if speaker.now != nil, speaker.storyPagesOpen == 0 {
+                    NowPlayingBar()
+                        .padding(.horizontal, Design.sideMargin + 4)
+                        .padding(.bottom, 6)
+                }
             }
+            .animation(.snappy, value: speaker.now == nil)
         }
-        .animation(.snappy, value: speaker.now == nil)
     }
 }
 
@@ -253,11 +304,16 @@ struct StoryListenButton: View {
         let id = "story-\(story.id)"
         let on = speaker.isPlaying(id)
         Button { speaker.play(story: story) } label: {
-            Image(systemName: on ? "pause.circle.fill" : "play.circle.fill")
-                .font(.system(size: 20, weight: .semibold))
-                .symbolRenderingMode(.palette)
-                .foregroundStyle(.white, Theme.accent)
-                .contentTransition(.symbolEffect(.replace))
+            if speaker.playing == id && speaker.preparing {
+                // straight away, so it's clear the tap worked while the story gets ready
+                ProgressView().tint(Theme.accent)
+            } else {
+                Image(systemName: on ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Theme.accent)
+                    .contentTransition(.symbolEffect(.replace))
+            }
         }
         .sensoryFeedback(.selection, trigger: on)
         .accessibilityLabel(on ? "Pause the story" : "Listen to the story")

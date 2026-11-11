@@ -131,7 +131,9 @@ struct RootView: View {
                 .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
                 .tag(3)
         }
-        // like Apple News in the 2.0 look: the tab bar shrinks to a circle while you scroll down
+        // iOS 26: the tab bar shrinks to a circle while you scroll down, and what's playing sits
+        // beside it (or above it, full width, when it's open)
+        .modifier(PlayerTabBar())
         // Colors are read when views draw, so a new look rebuilds the pages (the sheet stays open).
         .id(look.appearance)
         // the tab you're on is highlighted in the accent
@@ -173,3 +175,20 @@ enum DeepLink {
     static var pending: URL?
 }
 
+
+/// The tab bar: shrinks while scrolling down (iOS 26), with the player as its accessory (iOS 26.1).
+private struct PlayerTabBar: ViewModifier {
+    @ObservedObject private var speaker = Speaker.shared
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.1, *) {
+            content
+                .tabBarMinimizeBehavior(.onScrollDown)
+                .tabViewBottomAccessory(isEnabled: speaker.now != nil && speaker.storyPagesOpen == 0) { NowPlayingAccessory() }
+        } else if #available(iOS 26, *) {
+            content.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            content
+        }
+    }
+}

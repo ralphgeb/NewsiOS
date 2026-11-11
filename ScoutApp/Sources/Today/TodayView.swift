@@ -408,7 +408,7 @@ struct TopStoriesCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHead(title: title, detail: "\(items.count)")
+            SectionHead(title: title, detail: "\(items.count)", top: 0)
             ForEach(Array(items.prefix(2).enumerated()), id: \.element.id) { i, item in
                 if let s = item.story {
                     NavigationLink(value: StoryRoute(id: s.id, sequence: sequence)) {

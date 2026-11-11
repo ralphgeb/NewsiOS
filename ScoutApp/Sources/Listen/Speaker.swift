@@ -98,7 +98,7 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     }
 
     /// A story: its recording if there is one. If not, the Scout service records it (a few
-    /// seconds); after a second's pause a short "hold on" line plays while it does. If it can't
+    /// seconds); after half a second a short "hold on" line plays while it does. If it can't
     /// be recorded, the phone's voice reads the story instead.
     func play(story s: Story) {
         let id = "story-\(s.id)"
@@ -124,7 +124,7 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
                 return file
             }
             if !recorded {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .milliseconds(500))
                 if self.playing == id, self.player == nil, let hold = index?.holdURL() {
                     let item = AVPlayerItem(url: hold)
                     self.startPlayer([item], last: nil)
@@ -375,7 +375,6 @@ struct BriefingListen: View {
     var style: Style = .pill
     var artwork: URL? = nil
     @ObservedObject private var speaker = Speaker.shared
-    @AppStorage(ListenVisual.key) private var visualRaw = ListenVisual.bars.rawValue
     @State private var index: AudioIndex?
 
     static let voice = "chirp"
@@ -391,7 +390,7 @@ struct BriefingListen: View {
     }
 
     private var id: String { "brief-\(topic.rawValue)-\(brief.generated?.timeIntervalSince1970 ?? 0)-\(Self.voice)" }
-    private var visual: ListenVisual { ListenVisual(rawValue: visualRaw) ?? .bars }
+    private let visual = ListenVisual.bars
 
     /// About how long the briefing takes to hear.
     private var minutes: Int {
@@ -463,7 +462,7 @@ struct BriefingListen: View {
     /// 3. A big round button half over the picture's corner.
     private func bubble(_ on: Bool) -> some View {
         ZStack {
-            if on { PlaybackVisual(style: visual == .ring ? .ring : .pulse, playing: true, progress: speaker.progress, size: 74) }
+            if on { PlaybackVisual(style: .pulse, playing: true, progress: speaker.progress, size: 74) }
             icon(on, size: 58)
                 .overlay(Circle().strokeBorder(Theme.card, lineWidth: 3))
         }
