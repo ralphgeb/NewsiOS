@@ -376,18 +376,13 @@ struct BriefingListen: View {
     var artwork: URL? = nil
     @ObservedObject private var speaker = Speaker.shared
     @State private var index: AudioIndex?
+    @State private var showPlus = false
+    @AppStorage(Plus.key) private var hasPlus = false
 
     static let voice = "chirp"
 
-    /// Which design each section tries.
-    static func style(for topic: Topic) -> Style {
-        switch topic {
-        case .tech: return .pill
-        case .finance: return .bar
-        case .world: return .bubble
-        case .fashion: return .player
-        }
-    }
+    /// The round button half over the picture's corner, for every section.
+    static func style(for topic: Topic) -> Style { .bubble }
 
     private var id: String { "brief-\(topic.rawValue)-\(brief.generated?.timeIntervalSince1970 ?? 0)-\(Self.voice)" }
     private let visual = ListenVisual.bars
@@ -415,6 +410,7 @@ struct BriefingListen: View {
         .sensoryFeedback(.selection, trigger: on)
         .accessibilityLabel(on ? "Pause the \(topic.title) briefing" : "Listen to the \(topic.title) briefing, \(minutes) minutes")
         .task { index = await AudioIndex.load() }
+        .sheet(isPresented: $showPlus) { PlusSheet(reason: "Listening to the briefings is part of Scout Plus.") }
     }
 
     private func icon(_ on: Bool, size: CGFloat) -> some View {
@@ -465,6 +461,13 @@ struct BriefingListen: View {
             if on { PlaybackVisual(style: .pulse, playing: true, progress: speaker.progress, size: 74) }
             icon(on, size: 58)
                 .overlay(Circle().strokeBorder(Theme.card, lineWidth: 3))
+                .overlay(alignment: .topTrailing) {
+                    if !hasPlus {
+                        Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.text)
+                            .frame(width: 20, height: 20).background(Theme.card, in: Circle())
+                            .offset(x: 2, y: -2)
+                    }
+                }
         }
         .frame(width: 76, height: 76)
         .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
@@ -504,6 +507,7 @@ struct BriefingListen: View {
 
     private func play() async {
         let title = "\(topic.title) briefing"
+        guard hasPlus else { showPlus = true; return }
         if speaker.playing == id { speaker.toggle(); return }
         if index?.url(topic.rawValue, Self.voice) == nil { index = await AudioIndex.load() }
         let info = NowPlaying(title: brief.title, subtitle: title, artwork: artwork, section: topic.rawValue)
@@ -527,7 +531,7 @@ struct BriefingListen: View {
 @MainActor
 enum PlayBriefing {
     static func run(section: String, voice: String = BriefingListen.voice) async {
-        guard let topic = Topic(rawValue: section) else { return }
+        guard let topic = Topic(rawValue: section), Plus.isActive else { return }
         let briefing = Feed.cached(Feed.briefing).flatMap(Feed.decodeBriefing)
         let brief = briefing?.section(topic)
         let id = "brief-\(section)-\(brief?.generated?.timeIntervalSince1970 ?? 0)-\(voice)"

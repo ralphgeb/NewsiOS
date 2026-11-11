@@ -101,6 +101,7 @@ struct RootView: View {
     @EnvironmentObject private var weather: WeatherModel
     @EnvironmentObject private var tube: TubeService
     @State private var showSettings = false
+    @State private var showPlus = false
     @State private var tab = 0
 
     var body: some View {
@@ -140,6 +141,8 @@ struct RootView: View {
         .tint(Theme.accent)
         .sensoryFeedback(.selection, trigger: tab)
         .task { await store.refreshIfStale() }
+        .sheet(isPresented: $showPlus) { PlusSheet(reason: "Listening to the briefings is part of Scout Plus.") }
+        .task { Plus.share() }
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .environmentObject(store)
@@ -152,6 +155,7 @@ struct RootView: View {
             // scout://stocks, scout://history. Settings closes and the page starts from its top
             // (or the story), wherever you'd left it.
             showSettings = false
+            if url.host == "plus" { showPlus = true; return }    // a locked widget button
             DeepLink.pending = url          // for a page that isn't on screen yet (a cold start)
             NotificationCenter.default.post(name: .scoutShowPage, object: url)
             switch url.host {
@@ -176,17 +180,19 @@ enum DeepLink {
 }
 
 
-/// The tab bar: shrinks while scrolling down (iOS 26), with the player as its accessory (iOS 26.1).
+/// The tab bar: always open, except while audio plays, when it shrinks as you scroll down (iOS 26)
+/// with the player as its accessory (iOS 26.1).
 private struct PlayerTabBar: ViewModifier {
     @ObservedObject private var speaker = Speaker.shared
 
     func body(content: Content) -> some View {
         if #available(iOS 26.1, *) {
+            // the tab bar stays open, and shrinks to a circle beside the player only while audio plays
             content
-                .tabBarMinimizeBehavior(.onScrollDown)
+                .tabBarMinimizeBehavior(speaker.now != nil ? .onScrollDown : .never)
                 .tabViewBottomAccessory(isEnabled: speaker.now != nil && speaker.storyPagesOpen == 0) { NowPlayingAccessory() }
         } else if #available(iOS 26, *) {
-            content.tabBarMinimizeBehavior(.onScrollDown)
+            content.tabBarMinimizeBehavior(speaker.now != nil ? .onScrollDown : .never)
         } else {
             content
         }

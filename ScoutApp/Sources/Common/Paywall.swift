@@ -1,5 +1,6 @@
 import StoreKit
 import SwiftUI
+import WidgetKit
 
 /// Scout Plus. Without it (the default) the summaries, the first stories of each list and the
 /// look presets (for a minute) are free; the rest is locked. Bought through the App Store.
@@ -16,6 +17,17 @@ enum Plus {
     static let supportURL = URL(string: "https://scout-stocks.ralph-gebara.workers.dev/support")!
 
     static var isActive: Bool { UserDefaults.standard.bool(forKey: key) }
+
+    /// TestFlight only: act as if there's no Scout Plus, to try what's free and what's paid.
+    static let testFreeKey = "plus.testAsFree"
+    static var isTestFlight: Bool { Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" }
+
+    /// The widgets can't read the app's own settings, so Plus is copied into the App Group.
+    static let sharedKey = "plus.active"
+    static func share() {
+        Shared.defaults.set(isActive, forKey: sharedKey)
+        WidgetCenter.shared.reloadTimelines(ofKind: ListenState.widgetKind)
+    }
 
     /// Before the App Store answers: "£0.99" in the UK, "$0.99" elsewhere.
     static var price: String {
@@ -67,6 +79,8 @@ final class PlusStore: ObservableObject {
             if case .verified(let t) = result, t.productID == Self.productID, t.revocationDate == nil { active = true }
         }
         let d = UserDefaults.standard
+        if d.bool(forKey: Plus.testFreeKey) { active = false }
+        defer { Plus.share() }
         if active {
             if !d.bool(forKey: Plus.key) { d.set(Date.now.timeIntervalSince1970, forKey: Plus.sinceKey) }
             d.set(true, forKey: Plus.key)
@@ -89,6 +103,7 @@ final class PlusStore: ObservableObject {
         guard let result = try? await product.purchase() else { return false }
         if case .success(let verification) = result, case .verified(let t) = verification {
             await t.finish()
+            UserDefaults.standard.set(false, forKey: Plus.testFreeKey)   // buying ends a free-user test
             UserDefaults.standard.set("store", forKey: Plus.sourceKey)
             await refresh()
             return true
@@ -191,6 +206,7 @@ struct PlusSheet: View {
                     .multilineTextAlignment(.center)
             }
             VStack(alignment: .leading, spacing: 8) {
+                perk("Listen to every briefing and story")
                 perk("Every story in For you and every section")
                 perk("Follow any stock, with its AI summary")
                 perk("Your own colours, themes and app icons")

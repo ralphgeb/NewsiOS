@@ -129,6 +129,7 @@ struct SettingsView: View {
     @AppStorage(Plus.sinceKey) private var since = 0.0
     @AppStorage(Plus.sourceKey) private var plusSource = ""
     @AppStorage(Plus.freeStyleKey) private var freeStyle = "scout"
+    @AppStorage(Plus.testFreeKey) private var testAsFree = false
     @State private var showPlus = false
     @State private var previewNote = false
     @State private var currentIcon: String?
@@ -219,7 +220,7 @@ struct SettingsView: View {
                         ScoutLogo(animated: false).frame(width: 34, height: 34)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Get Scout Plus").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
-                            Text("Every story, your stocks and your colours · \(Plus.price) a month")
+                            Text("Listen, every story, your stocks and colours · \(Plus.price) a month")
                                 .font(.system(size: 13)).foregroundStyle(Theme.secondary)
                         }
                         Spacer()
@@ -228,8 +229,16 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
             }
+            if Plus.isTestFlight {
+                // testing only: switch Scout Plus off to see what's free, and back on
+                Toggle("Test as a free user", isOn: $testAsFree)
+                    .tint(Theme.accent)
+                    .onChange(of: testAsFree) { _, _ in Task { await PlusStore.shared.refresh() } }
+            }
         } footer: {
-            if hasPlus {
+            if Plus.isTestFlight {
+                Text(testAsFree ? "TestFlight: Scout Plus is off so you can try the free version. Switch it off to get your subscription back." : "TestFlight only: \"Test as a free user\" resets Scout Plus on this phone, without cancelling the sandbox subscription.")
+            } else if hasPlus {
                 Text("Through the App Store.")
             }
         }

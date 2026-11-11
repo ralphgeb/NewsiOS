@@ -299,11 +299,13 @@ private struct NowPlayingInset: ViewModifier {
 struct StoryListenButton: View {
     let story: Story
     @ObservedObject private var speaker = Speaker.shared
+    @AppStorage(Plus.key) private var hasPlus = false
+    @State private var showPlus = false
 
     var body: some View {
         let id = "story-\(story.id)"
         let on = speaker.isPlaying(id)
-        Button { speaker.play(story: story) } label: {
+        Button { if hasPlus { speaker.play(story: story) } else { showPlus = true } } label: {
             if speaker.playing == id && speaker.preparing {
                 // straight away, so it's clear the tap worked while the story gets ready
                 ProgressView().tint(Theme.accent)
@@ -317,6 +319,7 @@ struct StoryListenButton: View {
         }
         .sensoryFeedback(.selection, trigger: on)
         .accessibilityLabel(on ? "Pause the story" : "Listen to the story")
+        .sheet(isPresented: $showPlus) { PlusSheet(reason: "Listening to stories is part of Scout Plus.") }
     }
 }
 

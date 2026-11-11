@@ -46,6 +46,8 @@ struct ListenEntry: TimelineEntry {
     let topic: Topic
     /// This widget's own page key (its size and configured section).
     var slot: String = ""
+    /// Scout Plus (listening is part of it); without it the play button opens the offer.
+    var plus: Bool = Shared.defaults.bool(forKey: "plus.active")
     /// The section playing in Scout right now (shows pause on its button).
     var nowPlaying: String? = ListenState.paused ? nil : ListenState.section
     /// Each section's briefing headline.
@@ -136,7 +138,20 @@ struct ListenWidgetView: View {
         }
     }
 
-    private func play(size: CGFloat) -> some View {
+    @ViewBuilder private func play(size: CGFloat) -> some View {
+        if entry.plus { playButton(size: size) } else {
+            Link(destination: URL(string: "scout://plus")!) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: size * 0.34, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: size, height: size)
+                    .background(accent, in: Circle())
+            }
+            .accessibilityLabel("Listening is part of Scout Plus")
+        }
+    }
+
+    private func playButton(size: CGFloat) -> some View {
         let on = entry.nowPlaying == topic.rawValue
         return Button(intent: PlayBriefingIntent(section: topic.rawValue, voice: "chirp")) {
             Image(systemName: on ? "pause.fill" : "play.fill")

@@ -124,7 +124,7 @@ struct OnboardingView: View {
                         .foregroundStyle(Theme.text)
                 }
                 Reveal(delay: 3.0, duration: 1.8) {
-                    Text("Your morning news, simplified.")
+                    Text("Your day's news, simplified.")
                         .font(.system(size: 15))
                         .foregroundStyle(Theme.secondary)
                 }
@@ -138,15 +138,15 @@ struct OnboardingView: View {
     private var howItWorks: some View {
         VStack(alignment: .leading, spacing: 24) {
             Spacer()
-            Text("One calm read\nwith your coffee")
+            Text("Start and end your day\nin the know")
                 .font(.system(size: 26, weight: .semibold))
                 .tracking(-0.3)
                 .foregroundStyle(Theme.text)
                 .padding(.bottom, 4)
-            point("sun.horizon", "A briefing by 6:00",
-                  "Every morning Scout reads about 150 news sites from the UK, the US, Europe and Asia, and writes briefings on what happened, why it matters and what to watch.")
-            point("cup.and.saucer", "It doesn't break news",
-                  "It gathers the night's breaking news into one short, clear front page, ready before your first coffee.")
+            point("sun.horizon", "Two briefings a day",
+                  "One with your morning coffee, one to catch up on the way home. Scout reads about 150 news sites from the UK, the US, Europe and Asia and tells you what happened, why it matters and what to watch.")
+            point("headphones", "Read it or hear it",
+                  "With Scout Plus, every briefing and story is read aloud in a natural voice, a couple of minutes each, so you can listen on the go.")
             point("chart.line.uptrend.xyaxis", "The rest of your morning",
                   "A front page built around your topics, plus your stocks, the weather and the metro, all on Today.")
             Spacer()
