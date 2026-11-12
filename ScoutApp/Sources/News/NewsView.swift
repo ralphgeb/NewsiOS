@@ -123,15 +123,8 @@ struct NewsView: View {
             } else if all.isEmpty {
                 EmptyCard(symbol: "magnifyingglass", title: "Nothing here yet", text: "Try another section.")
             } else {
-                // Morning and Evening, when both are out
-                let editions = store.briefing.todaysEditions(topic)
-                if editions.count > 1 {
-                    Picker("Edition", selection: Binding(get: { shownEdition }, set: { e in withAnimation(.snappy) { edition = e } })) {
-                        ForEach(editions, id: \.self) { Text($0).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                }
-                let cover = section.topic.flatMap { store.briefing.section($0, edition: editions.count > 1 ? shownEdition : nil) }
+                // the latest briefing for the section (no Morning / Evening switch)
+                let cover = section.topic.flatMap { store.briefing.section($0) }
                 let hero = cover == nil ? heroPick(items, section) : nil
                 if let topic = section.topic, let brief = cover {
                     SectionCover(topic: topic, brief: brief, lead: store.story(brief.leadStoryId), sequence: seq)
