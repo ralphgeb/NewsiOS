@@ -371,6 +371,8 @@ struct ScoutMark: View {
 /// opening first (once per edition) and a short link before each next one ("Moving on to the
 /// markets…", "Last one, I promise…"). The sections are chosen in Settings › Play my briefings.
 struct PlayMyBriefings: View {
+    /// Inside Today's lead card: no card of its own, the picture above it.
+    var embedded = false
     @EnvironmentObject private var store: NewsStore
     @ObservedObject private var speaker = Speaker.shared
     @AppStorage(Plus.key) private var hasPlus = false
@@ -420,17 +422,33 @@ struct PlayMyBriefings: View {
                     .frame(width: 44, height: 44)
                     .padding(5)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Your \(Intro.edition.lowercased()) briefing").scoutLabel()
+                        HStack(spacing: 5) {
+                            Image(systemName: "headphones").font(.system(size: 10, weight: .heavy))
+                            Text("Your audio briefing")
+                        }
+                        .font(.system(size: 11, weight: .heavy)).tracking(0.6).textCase(.uppercase)
+                        .foregroundStyle(Theme.accent)
                         Text(on ? "Playing now" : mine ? "Carry on listening" : words.0)
                             .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
-                        Text(on || mine ? sections.map(\.title).joined(separator: " · ") : "\(words.1) · \(minutes) min")
+                        Text(on || mine || embedded ? sections.map(\.title).joined(separator: " · ") : "\(minutes) min · \(sections.map(\.title).joined(separator: ", "))")
                             .font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(1)
                     }
                     Spacer(minLength: 0)
-                    if on { ClockVisual() }
+                    if on {
+                        ClockVisual()
+                    } else if !embedded {
+                        EmptyView()
+                    } else {
+                        Text("\(minutes) min")
+                            .font(Theme.number(12, weight: .bold))
+                            .padding(.horizontal, 9).frame(height: 24)
+                            .background(Theme.track, in: Capsule())
+                            .foregroundStyle(Theme.text)
+                    }
                 }
                 .padding(.leading, 8).padding(.trailing, 16).padding(.vertical, 10)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(embedded ? Color.clear : Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .contentShape(Rectangle())
             }
             .buttonStyle(PressStyle())
             .sensoryFeedback(.selection, trigger: on)

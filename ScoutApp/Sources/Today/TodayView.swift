@@ -31,8 +31,6 @@ struct TodayView: View {
                       }, isRefreshing: store.isLoading) {
                 if let page {
                     ForEach(visible(page)) { card in
-                        // Play my briefings sits just above Top stories
-                        if card == .top { PlayMyBriefings() }
                         editableCard(card, page: page)
                     }
                     if editing {
@@ -41,8 +39,9 @@ struct TodayView: View {
                         footer(page)
                     }
                 } else {
-                    if editing || !hidden.contains(.weather) { WeatherCard() }
-                    if editing || !hidden.contains(.tube) { TubeCard() }
+                    if !hidden.contains(.weather) || !hidden.contains(.tube) {
+                        GlanceCard(showWeather: !hidden.contains(.weather), showTube: !hidden.contains(.tube))
+                    }
                     waiting
                 }
             }
@@ -79,7 +78,21 @@ struct TodayView: View {
     }
 
     private func visible(_ page: FrontPage) -> [TodayCard] {
-        order.filter { isAvailable($0, page) && !hidden.contains($0) }
+        let list = order.filter { isAvailable($0, page) && !hidden.contains($0) }
+        // the weather and the metro share one card, where the first of the two sits
+        guard let first = list.first(where: { $0 == .weather || $0 == .tube }) else { return list }
+        return list.filter { ($0 != .weather && $0 != .tube) || $0 == first }
+    }
+
+    /// The weather and the metro share one card: hiding it hides both.
+    private func hide(_ card: TodayCard) {
+        if card == .weather || card == .tube {
+            var h = hidden
+            h.insert(.weather); h.insert(.tube)
+            withAnimation(.snappy) { hiddenRaw = TodayCard.allCases.filter(h.contains).map(\.rawValue).joined(separator: ",") }
+        } else {
+            setHidden(card, true)
+        }
     }
 
     private func isAvailable(_ card: TodayCard, _ page: FrontPage) -> Bool {
@@ -122,7 +135,7 @@ struct TodayView: View {
             }
             .overlay(alignment: .topLeading) {
                 if editing {
-                    CornerButton(symbol: "minus", label: "Hide \(card.title)") { setHidden(card, true) }
+                    CornerButton(symbol: "minus", label: "Hide \(card.title)") { hide(card) }
                         .offset(x: -8, y: -8)
                         .transition(.scale.combined(with: .opacity))
                 }
@@ -199,7 +212,7 @@ struct TodayView: View {
     /// Cards you've turned off, faded, each with a plus to bring it back.
     @ViewBuilder
     private func hiddenSection(_ page: FrontPage) -> some View {
-        let off = order.filter { hidden.contains($0) && isAvailable($0, page) }
+        let off = order.filter { hidden.contains($0) && isAvailable($0, page) && !($0 == .tube && hidden.contains(.weather)) }
         if !off.isEmpty {
             Text("Hidden").scoutLabel()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -209,7 +222,15 @@ struct TodayView: View {
                     .allowsHitTesting(false)
                     .opacity(0.38)
                     .overlay(alignment: .topLeading) {
-                        CornerButton(symbol: "plus", label: "Show \(card.title)") { setHidden(card, false) }
+                        CornerButton(symbol: "plus", label: "Show \(card.title)") {
+                            if card == .weather || card == .tube {
+                                var h = hidden
+                                h.remove(.weather); h.remove(.tube)
+                                withAnimation(.snappy) { hiddenRaw = TodayCard.allCases.filter(h.contains).map(\.rawValue).joined(separator: ",") }
+                            } else {
+                                setHidden(card, false)
+                            }
+                        }
                             .offset(x: -8, y: -8)
                     }
             }
@@ -238,20 +259,23 @@ struct TodayView: View {
     private func cardView(_ card: TodayCard, page: FrontPage) -> some View {
         let seq = sequence(page)
         switch card {
-        case .weather: WeatherCard()
-        case .tube: TubeCard()
+        case .weather, .tube: GlanceCard(showWeather: !hidden.contains(.weather), showTube: !hidden.contains(.tube))
         case .markets: MarketsCard()
-        case .top: TopStoriesCard(items: topItems(page), sequence: seq, title: page.isWritten ? "Top stories" : "Key stories")
+        case .top:
+            VStack(spacing: 14) {
+                TodayLead(page: page, sequence: seq)
+                TopStoriesCard(items: restItems(page), sequence: seq, title: page.isWritten ? "Top stories" : "Key stories", start: page.cover == nil ? 1 : 2, heroes: 1)
+            }
         case .movers: MoversCard(title: page.moversTitle, movers: page.movers)
         case .brief: InBriefCard(items: page.brief, sequence: seq)
         case .more: MoreCard(title: store.interests.isEmpty ? "More in \(store.topic.title)" : "More for you", stories: page.more, sequence: seq)
         }
     }
 
-    /// Top stories opens Today: the cover story first (it had its own card before), then the rest.
-    private func topItems(_ page: FrontPage) -> [FrontPage.Item] {
-        guard let cover = page.cover, !page.items.contains(where: { $0.story?.id == cover.id }) else { return page.items }
-        return [FrontPage.Item(id: cover.id, story: cover, title: cover.title, text: store.reason(cover))] + page.items
+    /// The lead has its own card at the top, so Top stories carries on from number 2.
+    private func restItems(_ page: FrontPage) -> [FrontPage.Item] {
+        guard let cover = page.cover else { return page.items }
+        return page.items.filter { $0.story?.id != cover.id }
     }
 
     private var waiting: some View {
@@ -313,8 +337,7 @@ enum TodayCard: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .weather: return "Weather"
-        case .tube: return "Metro status"
+        case .weather, .tube: return "Weather and travel"
         case .markets: return "Markets"
         case .top: return "Top stories"
         case .movers: return "Companies to watch"
@@ -400,39 +423,113 @@ struct CoverCard: View {
 
 }
 
+/// The first thing on Today: the day's lead story as a cover (its picture, the headline set on it),
+/// with your audio briefing built into the bottom of the same card. One tap reads, one tap listens.
+struct TodayLead: View {
+    let page: FrontPage
+    let sequence: [String]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            NavigationLink(value: page.cover.map { StoryRoute(id: $0.id, sequence: sequence) }) {
+                StoryImage(story: page.cover)
+                    .frame(height: Design.leadImage)
+                    .overlay {
+                        LinearGradient(stops: [.init(color: .black.opacity(0.28), location: 0),
+                                               .init(color: .black.opacity(0), location: 0.22),
+                                               .init(color: .black.opacity(0), location: 0.38),
+                                               .init(color: .black.opacity(0.85), location: 1)],
+                                       startPoint: .top, endPoint: .bottom)
+                            .allowsHitTesting(false)
+                    }
+                    .overlay(alignment: .topLeading) {
+                        HStack(spacing: 6) {
+                            Text("1").font(Theme.number(12, weight: .bold))
+                                .frame(width: 20, height: 20)
+                                .background(.white, in: Circle())
+                                .foregroundStyle(Theme.accent)
+                            Text("Top story").font(.system(size: 11, weight: .heavy)).tracking(0.8).textCase(.uppercase)
+                        }
+                        .padding(.leading, 3).padding(.trailing, 10)
+                        .frame(height: 26)
+                        .background(Theme.accent, in: Capsule())
+                        .foregroundStyle(.white)
+                        .padding(14)
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(page.title)
+                                .font(Theme.headline(26, weight: .heavy))
+                                .tracking(-0.4)
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(4)
+                                .minimumScaleFactor(0.8)
+                                .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+                            if let cover = page.cover {
+                                HStack(spacing: 4) {
+                                    Text(cover.outletName)
+                                    if cover.outletCount > 1 { Text("+\(cover.outletCount - 1)") }
+                                    Text("· \(Format.ago(cover.published))")
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.78))
+                                .lineLimit(1)
+                            }
+                        }
+                        .padding(18)
+                    }
+            }
+            .buttonStyle(PressStyle())
+            .disabled(page.cover == nil)
+            .storyZoomSource(page.cover?.id)
+
+            PlayMyBriefings(embedded: true)
+                .padding(.vertical, 2)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+}
+
 /// The briefing's top stories: the first two with pictures, the rest as numbered rows.
 struct TopStoriesCard: View {
     let items: [FrontPage.Item]
     let sequence: [String]
     let title: String
+    /// The number of the first story here (2 when the lead has its own card above).
+    var start = 1
+    /// How many open with a big picture.
+    var heroes = 2
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHead(title: title, detail: "\(items.count)", top: 0)
-            ForEach(Array(items.prefix(2).enumerated()), id: \.element.id) { i, item in
+            SectionHead(title: title, detail: "\(items.count + start - 1)", top: 0)
+            ForEach(Array(items.prefix(heroes).enumerated()), id: \.element.id) { i, item in
                 if let s = item.story {
                     NavigationLink(value: StoryRoute(id: s.id, sequence: sequence)) {
-                        NumberedHero(number: i + 1, story: s, title: item.title, text: item.text)
+                        NumberedHero(number: i + start, story: s, title: item.title, text: item.text)
                     }
                     .buttonStyle(PressStyle())
                     .storyZoomSource(s.id)
                 } else {
-                    plain(item, number: i + 1)
+                    plain(item, number: i + start)
                 }
             }
-            let rest = Array(items.dropFirst(2).enumerated())
+            let rest = Array(items.dropFirst(heroes).enumerated())
             if !rest.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(rest, id: \.element.id) { i, item in
                         Group {
                             if let s = item.story {
                                 NavigationLink(value: StoryRoute(id: s.id, sequence: sequence)) {
-                                    StoryRow(story: s, number: i + 3, text: item.text)
+                                    StoryRow(story: s, number: i + heroes + start, text: item.text)
                                 }
                                 .buttonStyle(PressStyle())
                                 .storyZoomSource(s.id)
                             } else {
-                                plain(item, number: i + 3).background(Color.clear)
+                                plain(item, number: i + heroes + start).background(Color.clear)
                             }
                         }
                         if i < rest.count - 1 {

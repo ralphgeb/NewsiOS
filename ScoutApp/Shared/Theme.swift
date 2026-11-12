@@ -108,6 +108,8 @@ enum Design {
     static var topImage: CGFloat { bold ? 248 : 180 }
     /// The picture over a section's briefing.
     static var briefingImage: CGFloat { bold ? 262 : 190 }
+    /// The lead story at the top of Today.
+    static var leadImage: CGFloat { bold ? 330 : 280 }
 
     static func heavier(_ w: Font.Weight) -> Font.Weight {
         switch w {

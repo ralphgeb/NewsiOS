@@ -160,11 +160,13 @@ struct RemoteImage<Placeholder: View>: View {
 /// A story's picture, or a quiet box with the outlet's name when it has none.
 struct StoryImage: View {
     let story: Story?
+    /// A picture chosen for this place (a briefing's own), used instead of the story's.
+    var url: URL? = nil
 
     var body: some View {
         Color.clear
             .overlay {
-                RemoteImage(url: story?.imageURL) {
+                RemoteImage(url: url ?? story?.imageURL) {
                     // loading or no picture: Scout's mark, embossed in white
                     ScoutPlaceholder()
                 }

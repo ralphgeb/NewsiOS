@@ -214,23 +214,23 @@ struct SectionCover: View {
             let style = BriefingListen.style(for: topic)
             ZStack(alignment: style == .bubble ? .bottomTrailing : .bottomLeading) {
                 NavigationLink(value: lead.map { StoryRoute(id: $0.id, sequence: sequence) }) {
-                    StoryImage(story: lead).frame(height: Design.briefingImage)
+                    StoryImage(story: lead, url: brief.imageURL).frame(height: Design.briefingImage)
                 }
                 .buttonStyle(PressStyle())
                 .disabled(lead == nil)
                 .storyZoomSource(lead?.id)
                 // listen: each section tries a different design for now
                 if style == .pill {
-                    BriefingListen(topic: topic, brief: brief, style: .pill, artwork: lead?.imageURL).padding(12)
+                    BriefingListen(topic: topic, brief: brief, style: .pill, artwork: brief.imageURL ?? lead?.imageURL).padding(12)
                 } else if style == .bubble {
-                    BriefingListen(topic: topic, brief: brief, style: .bubble, artwork: lead?.imageURL)
+                    BriefingListen(topic: topic, brief: brief, style: .bubble, artwork: brief.imageURL ?? lead?.imageURL)
                         .padding(.trailing, 14)
                         .offset(y: 38)
                 }
             }
             .zIndex(1)
             if style == .bar || style == .player {
-                BriefingListen(topic: topic, brief: brief, style: style, artwork: lead?.imageURL)
+                BriefingListen(topic: topic, brief: brief, style: style, artwork: brief.imageURL ?? lead?.imageURL)
                     .padding(.horizontal, 14)
                     .padding(.top, 14)
             }

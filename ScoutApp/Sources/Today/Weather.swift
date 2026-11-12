@@ -503,7 +503,7 @@ extension WeatherCard {
 }
 
 /// The folded card's row: an icon every two hours for the next 12, with the time and temperature.
-private struct HourStrip: View {
+struct HourStrip: View {
     let hours: [WeatherModel.Hour]
 
     var body: some View {
@@ -528,14 +528,14 @@ private struct HourStrip: View {
 
 /// Lines the chart up with the row of columns under it: each four-hour mark sits in the middle of
 /// its column.
-private func columnDomain(_ hours: [WeatherModel.Hour]) -> ClosedRange<Date> {
+func columnDomain(_ hours: [WeatherModel.Hour]) -> ClosedRange<Date> {
     let first = hours.first?.time ?? .now
     let columns = Double((hours.count + 3) / 4)
     return first.addingTimeInterval(-2 * 3600)...first.addingTimeInterval((4 * columns - 2) * 3600)
 }
 
 /// Time and icon under each four-hour mark.
-private struct HourColumns<Extra: View>: View {
+struct HourColumns<Extra: View>: View {
     let hours: [WeatherModel.Hour]
     @ViewBuilder var extra: (WeatherModel.Hour) -> Extra
 
@@ -556,7 +556,7 @@ private struct HourColumns<Extra: View>: View {
 
 /// The next 24 hours: a smooth temperature line with a faint dot every hour, a bold dot and
 /// reading every four hours, and an icon under each.
-private struct HoursChart: View {
+struct HoursChart: View {
     let hours: [WeatherModel.Hour]
 
     var body: some View {
@@ -606,7 +606,7 @@ private struct HoursChart: View {
 }
 
 /// The chance of rain hour by hour, as bars that grow darker as rain gets likelier.
-private struct RainChart: View {
+struct RainChart: View {
     let hours: [WeatherModel.Hour]
 
     var body: some View {

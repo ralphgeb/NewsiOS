@@ -207,13 +207,17 @@ struct TubeCard: View {
     @State private var open: String?
     /// Tap the card's top line to fold it into one compact strip, and again to open it.
     @AppStorage("tube.compact") private var compact = true   // starts folded
+    /// Inside Today's glance card: always open, with no header or card of its own.
+    var embedded = false
 
     var body: some View {
         let bad = tube.lines.filter { $0.level > 0 }
         let good = tube.lines.filter { $0.level == 0 }
-        VStack(alignment: .leading, spacing: 12) {
+        let compact = embedded ? false : self.compact
+        let content = VStack(alignment: .leading, spacing: 12) {
+            if !embedded {
             Button {
-                withAnimation(.snappy) { compact.toggle() }
+                withAnimation(.snappy) { self.compact.toggle() }
             } label: {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 8) {
@@ -253,6 +257,7 @@ struct TubeCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(compact ? "\(tube.city.network), \(summary(bad)). Show details" : "\(tube.city.network). Fold away")
+            }
 
             if !compact {
                 if tube.lines.isEmpty {
@@ -287,13 +292,20 @@ struct TubeCard: View {
                 }
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, compact ? 15 : 18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        Group {
+            if embedded {
+                content.frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                content
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, compact ? 15 : 18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+        }
         .task { await tube.refresh() }
         .sensoryFeedback(.selection, trigger: open)
-        .sensoryFeedback(.impact(weight: .light), trigger: compact)
+        .sensoryFeedback(.impact(weight: .light), trigger: self.compact)
     }
 
     private func summary(_ bad: [TubeService.Line]) -> String {

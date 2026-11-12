@@ -274,9 +274,11 @@ struct Edition: Decodable, Identifiable, Hashable {
     var rumourWatch: [RumourNote]
     var stocksToWatch: [Mover]
     var inBrief: [BriefLine]
+    var image: String?
+    var imageURL: URL? { image.flatMap { $0.hasPrefix("http") ? URL(string: $0) : nil } }
 
     enum CodingKeys: String, CodingKey {
-        case id, edition, generated, storyCount, title, notification, intro, topStories, rumourWatch, stocksToWatch, inBrief
+        case id, edition, generated, storyCount, title, notification, intro, topStories, rumourWatch, stocksToWatch, inBrief, image
     }
 
     init(from decoder: Decoder) throws {
@@ -295,6 +297,7 @@ struct Edition: Decodable, Identifiable, Hashable {
         rumourWatch = c.lenientArray(.rumourWatch) ?? []
         stocksToWatch = c.lenientArray(.stocksToWatch) ?? []
         inBrief = c.lenientArray(.inBrief) ?? []
+        image = c.lenient(.image)
     }
 
     static func == (a: Edition, b: Edition) -> Bool { a.id == b.id }
@@ -355,6 +358,9 @@ struct SectionBrief: Decodable, Hashable {
     var movers: [Mover]
     /// Short labelled cards under the lead paragraph ("US: …", "Markets: …").
     var highlights: [Highlight]
+    /// This briefing's own picture (no two sections share one), else the lead story's.
+    var image: String?
+    var imageURL: URL? { image.flatMap { $0.hasPrefix("http") ? URL(string: $0) : nil } }
 
     struct Highlight: Decodable, Hashable {
         var label: String
@@ -362,7 +368,7 @@ struct SectionBrief: Decodable, Hashable {
         var storyId: String?
     }
 
-    enum CodingKeys: String, CodingKey { case generated, leadStoryId, title, notification, summary, points, movers, highlights }
+    enum CodingKeys: String, CodingKey { case generated, leadStoryId, title, notification, summary, points, movers, highlights, image }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -374,6 +380,7 @@ struct SectionBrief: Decodable, Hashable {
         points = c.lenientArray(.points) ?? []
         movers = c.lenientArray(.movers) ?? []
         highlights = c.lenientArray(.highlights) ?? []
+        image = c.lenient(.image)
     }
 }
 
