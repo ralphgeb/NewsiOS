@@ -120,8 +120,10 @@ struct Locked: ViewModifier {
     @State private var showPlus = false
 
     func body(content: Content) -> some View {
-        content
-            .blur(radius: locked ? 2.2 : 0)
+        Group {
+            // flattened before the blur, so the blur is one cheap picture rather than many layers
+            if locked { content.drawingGroup(opaque: false).blur(radius: 2.2) } else { content }
+        }
             .allowsHitTesting(!locked)
             .overlay {
                 if locked {

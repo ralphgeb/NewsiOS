@@ -30,6 +30,7 @@ struct TodayView: View {
                           _ = await (news, sky, trains)
                       }, isRefreshing: store.isLoading) {
                 if let page {
+                    if !editing { PlayMyBriefings() }
                     ForEach(visible(page)) { card in
                         editableCard(card, page: page)
                     }

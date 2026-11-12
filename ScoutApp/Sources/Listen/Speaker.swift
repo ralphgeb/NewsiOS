@@ -3,6 +3,25 @@ import MediaPlayer
 import SwiftUI
 import WidgetKit
 
+/// How far through what's playing. Its own object, so the many views that only need to know
+/// whether something is playing don't redraw four times a second.
+@MainActor
+final class PlaybackClock: ObservableObject {
+    @Published private(set) var progress: Double = 0
+    @Published private(set) var elapsed: Double = 0
+    @Published private(set) var duration: Double = 0
+
+    func set(elapsed e: Double, duration d: Double) {
+        let dur = d.isFinite && d > 0 ? d : 0
+        if dur != duration { duration = dur }
+        elapsed = e.isFinite ? max(0, e) : 0
+        let p = dur > 0 ? min(1, elapsed / dur) : 0
+        if abs(p - progress) > 0.002 || p == 0 { progress = p }
+    }
+
+    func reset() { progress = 0; elapsed = 0; duration = 0 }
+}
+
 /// What's playing, for the mini player, the story page and the Lock Screen / Control Centre.
 struct NowPlaying: Equatable {
     var title: String
@@ -28,10 +47,15 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     @Published private(set) var now: NowPlaying?
     /// Getting a story ready (the "hold on" line is playing, or the recording is on its way).
     @Published private(set) var preparing = false
-    /// How far through, 0 to 1 (recordings only), and the seconds played and in total.
-    @Published private(set) var progress: Double = 0
-    @Published private(set) var elapsed: Double = 0
-    @Published private(set) var duration: Double = 0
+    /// How far through: in its own object, so only the play buttons and the player redraw as it
+    /// moves, not every page.
+    let clock = PlaybackClock()
+    var progress: Double { clock.progress }
+    var elapsed: Double { clock.elapsed }
+    var duration: Double { clock.duration }
+    /// Titles for the recordings in a playlist (Play my briefings), shown as each one starts.
+    private var itemTitles: [ObjectIdentifier: (title: String, subtitle: String)] = [:]
+    private weak var lastTitledItem: AVPlayerItem?
     /// Story pages open in each tab: there the tab bar steps aside for the story's own bar.
     @Published private(set) var storyPages: [Int: Int] = [:]
     /// The tab on screen.
@@ -122,12 +146,15 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         play(id, title: title, urls: [url], info: info)
     }
 
-    /// Plays recordings one after the other (the short opening, then the briefing).
-    func play(_ id: String, title: String, urls: [URL], info: NowPlaying? = nil) {
+    /// Plays recordings one after the other (the short opening, then the briefing). `titles`, if
+    /// given, names each recording for the Lock Screen as it starts.
+    func play(_ id: String, title: String, urls: [URL], info: NowPlaying? = nil, titles: [(title: String, subtitle: String)] = []) {
         if playing == id { toggle(); return }
         guard !urls.isEmpty else { return }
         stop()
         let items = urls.map { AVPlayerItem(url: $0) }
+        itemTitles = [:]
+        for (item, t) in zip(items, titles) { itemTitles[ObjectIdentifier(item)] = t }
         startPlayer(items, last: items.last)
         begin(id, info ?? NowPlaying(title: title, subtitle: "Scout"))
     }
@@ -237,7 +264,7 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         playing = id
         paused = false
         now = info
-        progress = 0; elapsed = 0; duration = 0
+        clock.reset()
         artwork = nil
         updateNowPlaying()
         if let url = info.artwork {
@@ -296,13 +323,22 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     private func tick(_ t: CMTime) {
         guard let item = player?.currentItem else { return }
-        // the hold-on line and the opening don't count towards the progress
-        guard !preparing, lastItem == nil || item === lastItem else { return }
-        let d = item.duration.seconds
-        elapsed = t.seconds
-        duration = d.isFinite ? d : 0
-        progress = duration > 0 ? min(1, elapsed / duration) : 0
-        if Int(elapsed * 4) % 8 == 0 { updateNowPlaying() }
+        // the hold-on line doesn't count; each recording in a playlist counts on its own
+        guard !preparing else { return }
+        if item !== lastTitledItem {
+            lastTitledItem = item
+            if let t = itemTitles[ObjectIdentifier(item)], var n = now {
+                n.title = t.title; n.subtitle = t.subtitle; now = n
+            }
+            clock.set(elapsed: t.seconds, duration: item.duration.seconds)
+            updateNowPlaying()
+            return
+        }
+        let wasKnown = clock.duration > 0
+        clock.set(elapsed: t.seconds, duration: item.duration.seconds)
+        // the Lock Screen works out the time itself from the rate; tell it when the length is
+        // first known, and every few seconds so it stays in step
+        if (!wasKnown && clock.duration > 0) || Int(t.seconds * 4) % 20 == 0 { updateNowPlaying() }
     }
 
     private func finish() {
@@ -318,7 +354,8 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         paused = false
         preparing = false
         now = nil
-        progress = 0
+        clock.reset()
+        itemTitles = [:]
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
@@ -395,6 +432,12 @@ struct AudioIndex: Decodable {
     var stories: [String: File]? = nil
     /// The short "hold on" lines.
     var hold: [String]? = nil
+    /// Links between briefings, per section: "middle" ("Moving on to…") and "last" ("And finally…").
+    var transitions: [String: [String: [File]]]? = nil
+
+    func transitionURL(_ section: String, last: Bool) -> URL? {
+        transitions?[section]?[last ? "last" : "middle"]?.randomElement().flatMap { f in Self.base?.appending(path: String(f.path.dropFirst())) }
+    }
 
     static var base: URL? {
         (Bundle.main.object(forInfoDictionaryKey: "ScoutStocksURL") as? String).flatMap(URL.init(string:))
@@ -430,6 +473,7 @@ struct BriefingListen: View {
     var style: Style = .pill
     var artwork: URL? = nil
     @ObservedObject private var speaker = Speaker.shared
+    @ObservedObject private var clock = Speaker.shared.clock
     @State private var index: AudioIndex?
     @State private var showPlus = false
     @AppStorage(Plus.key) private var hasPlus = false
@@ -482,7 +526,7 @@ struct BriefingListen: View {
     private func pill(_ on: Bool) -> some View {
         HStack(spacing: 7) {
             icon(on, size: 26)
-            if on { PlaybackVisual(style: visual, playing: true, progress: speaker.progress, size: 18) }
+            if on { PlaybackVisual(style: visual, playing: true, progress: clock.progress, size: 18) }
             else { Text("\(minutes) min") }
         }
         .font(.system(size: 13, weight: .semibold))
@@ -500,7 +544,7 @@ struct BriefingListen: View {
                 .contentTransition(.symbolEffect(.replace))
             Text(on ? "Playing the briefing" : mine ? "Resume the briefing" : "Listen to the briefing")
             Spacer(minLength: 0)
-            if on { PlaybackVisual(style: visual, playing: true, progress: speaker.progress, size: 20, tint: .white) }
+            if on { PlaybackVisual(style: visual, playing: true, progress: clock.progress, size: 20, tint: .white) }
             else { Text("\(minutes) min").opacity(0.8) }
         }
         .font(.system(size: 15, weight: .bold))
@@ -513,7 +557,7 @@ struct BriefingListen: View {
     /// 3. A big round button half over the picture's corner.
     private func bubble(_ on: Bool) -> some View {
         ZStack {
-            if on { PlaybackVisual(style: .pulse, playing: true, progress: speaker.progress, size: 74) }
+            if on { PlaybackVisual(style: .pulse, playing: true, progress: clock.progress, size: 74) }
             icon(on, size: 58)
                 .overlay(Circle().strokeBorder(Theme.card, lineWidth: 3))
 
@@ -530,15 +574,15 @@ struct BriefingListen: View {
                 HStack {
                     Text("Listen").font(.system(size: 14, weight: .bold)).foregroundStyle(Theme.text)
                     Spacer()
-                    Text(mine && speaker.duration > 0 ? Self.clock(speaker.duration - speaker.elapsed) : "\(minutes) min")
+                    Text(mine && clock.duration > 0 ? Self.remaining(clock.duration - clock.elapsed) : "\(minutes) min")
                         .font(Theme.number(12, weight: .semibold)).foregroundStyle(Theme.secondary)
                 }
-                if on { PlaybackVisual(style: visual, playing: true, progress: speaker.progress, size: 14, wide: true) }
+                if on { PlaybackVisual(style: visual, playing: true, progress: clock.progress, size: 14, wide: true) }
                 else {
                     GeometryReader { g in
                         ZStack(alignment: .leading) {
                             Capsule().fill(Theme.track)
-                            Capsule().fill(Theme.accent).frame(width: g.size.width * (mine ? speaker.progress : 0))
+                            Capsule().fill(Theme.accent).frame(width: g.size.width * (mine ? clock.progress : 0))
                         }
                     }
                     .frame(height: 4)
@@ -549,7 +593,7 @@ struct BriefingListen: View {
         .background(Theme.track.opacity(0.6), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    static func clock(_ s: Double) -> String {
+    static func remaining(_ s: Double) -> String {
         let t = max(0, Int(s.rounded()))
         return "-\(t / 60):" + String(format: "%02d", t % 60)
     }

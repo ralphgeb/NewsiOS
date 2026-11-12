@@ -21,70 +21,109 @@ struct ScoutPage<Pinned: View, Content: View>: View {
     @ViewBuilder var pinned: () -> Pinned
     @ViewBuilder var content: () -> Content
 
-    @State private var offset: CGFloat = 0
-    /// The header slides away while you scroll down through stories, and comes back as soon as
-    /// you scroll up, so the page can use the whole screen.
-    @State private var headerHidden = false
-    @State private var lastOffset: CGFloat = 0
+    /// Where the page is scrolled to, kept in an object the page itself doesn't watch: only the
+    /// header (which hides and shows) redraws as you scroll, never the stories.
+    @State private var scroll = PageScroll()
+    @Environment(\.scoutTab) private var tab
 
     var body: some View {
         ZStack(alignment: .top) {
-            ScrollView {
-                VStack(spacing: 16) { content() }
-                    .padding(.horizontal, Design.sideMargin)
-                    .padding(.top, PageHeader.height + pinnedHeight + 10)
-                    .padding(.bottom, 36)
-                    // never wider than the screen, so the page only ever moves up and down
-                    .containerRelativeFrame(.horizontal)
-                    .background(GeometryReader { g in
-                        Color.clear.preference(key: ScrollOffsetKey.self, value: -g.frame(in: .named("page")).minY)
-                    })
-                    .background(alignment: .top) { Color.clear.frame(height: 1).id(RememberScroll.top) }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 16) { content() }
+                        .padding(.horizontal, Design.sideMargin)
+                        .padding(.top, PageHeader.height + pinnedHeight + 10)
+                        .padding(.bottom, 36)
+                        // never wider than the screen, so the page only ever moves up and down
+                        .containerRelativeFrame(.horizontal)
+                        .background(GeometryReader { g in
+                            Color.clear.preference(key: ScrollOffsetKey.self, value: -g.frame(in: .named("page")).minY)
+                        })
+                        .background(alignment: .top) { Color.clear.frame(height: 1).id(RememberScroll.top) }
+                }
+                .coordinateSpace(name: "page")
+                .modifier(TrackScrollOffset(scroll: scroll, pinned: PageHeader.height + pinnedHeight, editing: editing?.wrappedValue == true))
+                .modifier(RememberScroll(key: pageKey, scroll: scroll))
+                .modifier(ScrollRelease(scroll: scroll) { pulled in
+                    if pulled > 64, let onRefresh { Task { await onRefresh() } }
+                })
+                .scrollIndicators(.hidden)
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                // tapping the tab you're on goes back to the top
+                .onReceive(NotificationCenter.default.publisher(for: .scoutScrollTop)) { note in
+                    guard (note.object as? Int) == tab else { return }
+                    withAnimation(.snappy) { proxy.scrollTo(RememberScroll.top, anchor: .top) }
+                    scroll.show()
+                }
             }
-            .coordinateSpace(name: "page")
-            .modifier(TrackScrollOffset(offset: $offset))
-            .modifier(RememberScroll(key: pageKey, offset: offset))
-            .modifier(ScrollRelease(offset: offset) { pulled in
-                if pulled > 64, let onRefresh { Task { await onRefresh() } }
-            })
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
 
-            VStack(spacing: 0) {
+            PageHeaderLayer(scroll: scroll, pinnedHeight: pinnedHeight) {
                 PageHeader(title: title, subtitle: subtitle, showSettings: $showSettings,
                            editing: editing, isRefreshing: isRefreshing,
-                           pull: onRefresh == nil ? 0 : max(0, -offset))
+                           pull: onRefresh == nil ? 0 : scroll.pull)
                 pinned()
             }
-            .background(Theme.background)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Theme.hairline).frame(height: 0.5).opacity(offset > 4 && !headerHidden ? 1 : 0)
-            }
-            .offset(y: headerHidden ? -(PageHeader.height + pinnedHeight + 12) : 0)
-            .opacity(headerHidden ? 0 : 1)
-            .animation(.snappy(duration: 0.32), value: headerHidden)
 
             // the status bar keeps a solid background, so text never scrolls under the clock
             Theme.background
                 .frame(height: 0)
                 .ignoresSafeArea(edges: .top)
         }
-        .onChange(of: offset) { _, y in
-            let delta = y - lastOffset
-            if y < PageHeader.height + pinnedHeight || editing?.wrappedValue == true {
-                headerHidden = false          // near the top, or editing: always shown
-            } else if delta > 8 {
-                headerHidden = true           // moving down the page
-            } else if delta < -8 {
-                headerHidden = false          // moving back up
-            } else {
-                return                        // small wobbles don't count
-            }
-            lastOffset = y
-        }
-        .onChange(of: pageKey) { _, _ in headerHidden = false }
+        .onChange(of: pageKey) { _, _ in scroll.show() }
         .background(Theme.background.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+/// The scroll position and what follows from it. Only the values views draw from are published,
+/// and only when they change: the header's hidden state, the hairline under it, and the pull.
+@MainActor
+final class PageScroll: ObservableObject {
+    @Published private(set) var hidden = false
+    @Published private(set) var scrolled = false
+    @Published private(set) var pull: CGFloat = 0
+    private(set) var y: CGFloat = 0
+    private var last: CGFloat = 0
+    var furthestPull: CGFloat = 0
+
+    func update(_ y: CGFloat, pinned: CGFloat, editing: Bool) {
+        self.y = y
+        let s = y > 4
+        if s != scrolled { scrolled = s }
+        let p = max(0, -y)
+        if p != pull, p > 0 || pull != 0 { pull = p }
+        furthestPull = max(furthestPull, p)
+        let delta = y - last
+        if y < pinned || editing {
+            if hidden { hidden = false }       // near the top, or editing: always shown
+        } else if delta > 8 {
+            if !hidden { hidden = true }       // moving down the page
+        } else if delta < -8 {
+            if hidden { hidden = false }       // moving back up
+        } else {
+            return                             // small wobbles don't count
+        }
+        last = y
+    }
+
+    func show() { if hidden { hidden = false } }
+}
+
+/// The header over the page: slides away while you scroll down, back when you scroll up.
+private struct PageHeaderLayer<H: View>: View {
+    @ObservedObject var scroll: PageScroll
+    let pinnedHeight: CGFloat
+    @ViewBuilder var header: () -> H
+
+    var body: some View {
+        VStack(spacing: 0) { header() }
+            .background(Theme.background)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Theme.hairline).frame(height: 0.5).opacity(scroll.scrolled && !scroll.hidden ? 1 : 0)
+            }
+            .offset(y: scroll.hidden ? -(PageHeader.height + pinnedHeight + 12) : 0)
+            .opacity(scroll.hidden ? 0 : 1)
+            .animation(.snappy(duration: 0.32), value: scroll.hidden)
     }
 }
 
@@ -108,28 +147,26 @@ extension ScoutPage where Pinned == EmptyView {
 /// the top during that touch. (iOS 17 can't tell when you let go, so there it calls back as soon as
 /// the page is pulled 70 points.)
 private struct ScrollRelease: ViewModifier {
-    let offset: CGFloat
+    let scroll: PageScroll
     let onRelease: (_ furthestPull: CGFloat) -> Void
-    @State private var furthest: CGFloat = 0
     @State private var armed = true
 
     func body(content: Content) -> some View {
         if #available(iOS 18, *) {
             content
-                .onChange(of: offset) { _, y in furthest = max(furthest, -y) }
                 .onScrollPhaseChange { old, new in
-                    if new == .interacting { furthest = 0 }
+                    if new == .interacting { scroll.furthestPull = 0 }
                     if old == .interacting, new != .interacting {
-                        onRelease(furthest)
-                        furthest = 0
+                        onRelease(scroll.furthestPull)
+                        scroll.furthestPull = 0
                     }
                 }
         } else {
-            content.onChange(of: offset) { _, y in
-                if armed, y < -70 {
+            content.onReceive(scroll.$pull) { p in
+                if armed, p > 70 {
                     armed = false
-                    onRelease(-y)
-                } else if abs(y) < 2 {
+                    onRelease(p)
+                } else if p < 2 {
                     armed = true
                 }
             }
@@ -222,15 +259,19 @@ struct ScrollOffsetKey: PreferenceKey {
 /// Reports how far a ScrollView has scrolled. iOS 18 reads it from the scroll view itself;
 /// iOS 17 falls back to the preference set inside the content.
 struct TrackScrollOffset: ViewModifier {
-    @Binding var offset: CGFloat
+    let scroll: PageScroll
+    let pinned: CGFloat
+    let editing: Bool
 
     func body(content: Content) -> some View {
         if #available(iOS 18, *) {
             content.onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, v in
-                offset = v
+                MainActor.assumeIsolated { scroll.update(v, pinned: pinned, editing: editing) }
             }
         } else {
-            content.onPreferenceChange(ScrollOffsetKey.self) { offset = $0 }
+            content.onPreferenceChange(ScrollOffsetKey.self) { v in
+                MainActor.assumeIsolated { scroll.update(v, pinned: pinned, editing: editing) }
+            }
         }
     }
 }
@@ -241,11 +282,11 @@ struct TrackScrollOffset: ViewModifier {
 struct RememberScroll: ViewModifier {
     static let top = "scout.page.top"
     let key: String?
-    let offset: CGFloat
+    let scroll: PageScroll
 
     func body(content: Content) -> some View {
         if #available(iOS 18, *) {
-            content.modifier(RememberScroll18(key: key, offset: offset))
+            content.modifier(RememberScroll18(key: key, scroll: scroll))
         } else {
             ScrollViewReader { proxy in
                 content.onChange(of: key) { _, _ in proxy.scrollTo(Self.top, anchor: .top) }
@@ -257,7 +298,7 @@ struct RememberScroll: ViewModifier {
 @available(iOS 18, *)
 private struct RememberScroll18: ViewModifier {
     let key: String?
-    let offset: CGFloat
+    let scroll: PageScroll
     @State private var position = ScrollPosition(idType: String.self)
     @State private var saved: [String: CGFloat] = [:]
 
@@ -265,7 +306,7 @@ private struct RememberScroll18: ViewModifier {
         content
             .scrollPosition($position)
             .onChange(of: key) { old, new in
-                if let old { saved[old] = offset }
+                if let old { saved[old] = scroll.y }
                 let y = new.flatMap { saved[$0] } ?? 0
                 // once the new page is in place, so it's tall enough to scroll to
                 DispatchQueue.main.async { position.scrollTo(y: y) }

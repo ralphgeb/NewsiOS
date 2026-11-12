@@ -156,6 +156,7 @@ struct NowPlayingBar: View {
     /// The story on screen (tapping the player there doesn't open it again).
     var current: String? = nil
     @ObservedObject private var speaker = Speaker.shared
+    @ObservedObject private var clock = Speaker.shared.clock
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -176,7 +177,7 @@ struct NowPlayingBar: View {
                         }
                         Spacer(minLength: 0)
                         if !small, !speaker.preparing {
-                            PlaybackVisual(style: .bars, playing: on, progress: speaker.progress, size: 16)
+                            PlaybackVisual(style: .bars, playing: on, progress: clock.progress, size: 16)
                         }
                     }
                     .contentShape(Rectangle())
@@ -362,5 +363,103 @@ struct ScoutMark: View {
             }
             ctx.fill(Path(ellipseIn: CGRect(x: hub.x - 92 * k, y: hub.y - 92 * k, width: 184 * k, height: 184 * k)), with: .color(color))
         }
+    }
+}
+
+/// Today's "Play my briefings": the chosen sections' briefings one after another, the friendly
+/// opening first (once per edition) and a short link before each next one ("Moving on to the
+/// markets…", "Last one, I promise…"). The sections are chosen in Settings › Play my briefings.
+struct PlayMyBriefings: View {
+    @EnvironmentObject private var store: NewsStore
+    @ObservedObject private var speaker = Speaker.shared
+    @AppStorage(Plus.key) private var hasPlus = false
+    @AppStorage(PlayAll.key) private var chosen = PlayAll.defaultValue
+    @State private var showPlus = false
+    @State private var busy = false
+
+    private var sections: [Topic] { PlayAll.sections(chosen).filter { store.briefing.section($0) != nil } }
+    private var id: String { "brief-all-\(Intro.current)-\(sections.map(\.rawValue).joined())" }
+
+    private var minutes: Int {
+        let chars = sections.compactMap { store.briefing.section($0) }.flatMap(BriefingListen.parts).reduce(0) { $0 + $1.count }
+        return max(1, Int((Double(chars) / 15.5 / 60).rounded()))
+    }
+
+    var body: some View {
+        if !sections.isEmpty {
+            let on = speaker.isPlaying(id)
+            let mine = speaker.playing == id
+            Button { Task { await play() } } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(Theme.accent)
+                        if busy && !mine {
+                            ProgressView().tint(.white)
+                        } else {
+                            Image(systemName: on ? "pause.fill" : "play.fill")
+                                .font(.system(size: 17, weight: .black)).foregroundStyle(.white)
+                                .offset(x: on ? 0 : 1.5)
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                    }
+                    .frame(width: 48, height: 48)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(on ? "Playing your briefings" : mine ? "Resume your briefings" : "Play my briefings")
+                            .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
+                        Text("\(sections.map(\.title).joined(separator: ", ")) · \(minutes) min")
+                            .font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    if on { ClockVisual() }
+                }
+                .padding(12)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+            .buttonStyle(PressStyle())
+            .sensoryFeedback(.selection, trigger: on)
+            .sheet(isPresented: $showPlus) { PlusSheet(reason: "Listening to the briefings is part of Scout Plus.") }
+        }
+    }
+
+    private func play() async {
+        guard hasPlus else { showPlus = true; return }
+        if speaker.playing == id { speaker.toggle(); return }
+        busy = true
+        defer { busy = false }
+        guard let index = await AudioIndex.load() else { return }
+        var urls: [URL] = []
+        var titles: [(title: String, subtitle: String)] = []
+        for (i, topic) in sections.enumerated() {
+            guard let brief = store.briefing.section(topic), let main = index.url(topic.rawValue, BriefingListen.voice) else { continue }
+            let label = "\(topic.title) briefing"
+            if urls.isEmpty, Intro.due, let intro = index.url(topic.rawValue, "intro") {
+                Intro.markPlayed()
+                urls.append(intro); titles.append((brief.title, label))
+            } else if !urls.isEmpty, let link = index.transitionURL(topic.rawValue, last: i == sections.count - 1) {
+                urls.append(link); titles.append((brief.title, label))
+            }
+            urls.append(main); titles.append((brief.title, label))
+        }
+        guard !urls.isEmpty else { return }
+        let first = sections.first.flatMap { store.briefing.section($0) }
+        speaker.play(id, title: "Your briefings", urls: urls,
+                     info: NowPlaying(title: first?.title ?? "Your briefings", subtitle: "Your briefings"), titles: titles)
+        Stats.played("briefing", id: "all", title: "Play my briefings")
+    }
+}
+
+/// The moving bars, watching the clock (so only this redraws as it plays).
+private struct ClockVisual: View {
+    @ObservedObject private var clock = Speaker.shared.clock
+    var body: some View { PlaybackVisual(style: .bars, playing: true, progress: clock.progress, size: 20) }
+}
+
+/// Which sections Play my briefings plays, in order (Settings).
+enum PlayAll {
+    static let key = "playall.sections"
+    static let defaultValue = Topic.allCases.map(\.rawValue).joined(separator: ",")
+    static func sections(_ raw: String) -> [Topic] {
+        let set = Set(raw.split(separator: ",").map(String.init))
+        return Topic.allCases.filter { set.contains($0.rawValue) }
     }
 }

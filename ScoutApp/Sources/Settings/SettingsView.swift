@@ -130,6 +130,7 @@ struct SettingsView: View {
     @AppStorage(Plus.sourceKey) private var plusSource = ""
     @AppStorage(Plus.freeStyleKey) private var freeStyle = "scout"
     @AppStorage(Plus.testFreeKey) private var testAsFree = false
+    @AppStorage(PlayAll.key) private var playAll = PlayAll.defaultValue
     @State private var showPlus = false
     @State private var previewNote = false
     @State private var currentIcon: String?
@@ -143,6 +144,23 @@ struct SettingsView: View {
                 appearanceSection
                 iconSection
                 todaySection
+                Section {
+                    ForEach(Topic.allCases) { t in
+                        Toggle(t.title, isOn: Binding(
+                            get: { PlayAll.sections(playAll).contains(t) },
+                            set: { on in
+                                var set = Set(PlayAll.sections(playAll))
+                                if on { set.insert(t) } else if set.count > 1 { set.remove(t) }
+                                playAll = Topic.allCases.filter(set.contains).map(\.rawValue).joined(separator: ",")
+                            }))
+                        .tint(Theme.accent)
+                    }
+                } header: {
+                    Text("Play my briefings")
+                } footer: {
+                    Text("The briefings the Play my briefings button on Today plays, one after another, in this order.")
+                }
+                .listRowBackground(Theme.card)
                 Section {
                     if !hasPlus {
                         Button("Restore purchases") { Task { await PlusStore.shared.restore() } }

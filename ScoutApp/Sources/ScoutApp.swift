@@ -105,7 +105,11 @@ struct RootView: View {
     @State private var tab = 0
 
     var body: some View {
-        TabView(selection: $tab) {
+        TabView(selection: Binding(get: { tab }, set: { new in
+            // tapping the tab you're already on goes back to the top of its page
+            if new == tab { NotificationCenter.default.post(name: .scoutScrollTop, object: new) }
+            tab = new
+        })) {
             // Inside each tab, controls stay in the ink; only the tab bar uses the accent.
             TodayView(showSettings: $showSettings)
                 .storyTab(0)
@@ -176,6 +180,8 @@ struct RootView: View {
 extension Notification.Name {
     /// A widget was tapped: the named page shows its top (story pages close).
     static let scoutShowPage = Notification.Name("scoutShowPage")
+    /// The tab that's already showing was tapped again: its page goes back to the top.
+    static let scoutScrollTop = Notification.Name("scoutScrollTop")
 }
 
 /// The last widget link, kept until the page it's for has opened it.
