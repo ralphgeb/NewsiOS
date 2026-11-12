@@ -239,9 +239,32 @@ final class NewsStore: ObservableObject {
         if let topic = section.topic {
             // newest first; with US news on, Al Jazeera-only stories count as six hours older
             let key = { (s: Story) in s.published.addingTimeInterval(self.outletPenalty(s) > 0 ? -6 * 3600 : 0) }
-            return fresh.filter { $0.newsSection == topic }.sorted { key($0) > key($1) }
+            let newest = fresh.filter { $0.newsSection == topic }.sorted { key($0) > key($1) }
+            return Self.varied(newest, byRegion: topic == .finance || topic == .world)
         }
         return forYou(fresh, now: now)
+    }
+
+    /// Still roughly newest first, but varied: never the same outlet twice in a row (nor three
+    /// times in four), and in Finance and World never more than two of the last three from one
+    /// region, so the top of the page mixes the US, the UK, Europe and Asia.
+    static func varied(_ list: [Story], byRegion: Bool) -> [Story] {
+        var queue = list
+        var out: [Story] = []
+        out.reserveCapacity(list.count)
+        while !queue.isEmpty {
+            let lastOutlets = out.suffix(3).map(\.outletName)
+            let lastRegions = out.suffix(3).compactMap(\.region)
+            let ok = { (s: Story) -> Bool in
+                if s.outletName == out.last?.outletName { return false }
+                if lastOutlets.filter({ $0 == s.outletName }).count >= 2 { return false }
+                if byRegion, let r = s.region, r != "Global", lastRegions.filter({ $0 == r }).count >= 2 { return false }
+                return true
+            }
+            let i = queue.prefix(12).firstIndex(where: ok) ?? 0
+            out.append(queue.remove(at: i))
+        }
+        return out
     }
 
     /// World and Finance stories from the regions you follow; Global ones, and other sections, always.
