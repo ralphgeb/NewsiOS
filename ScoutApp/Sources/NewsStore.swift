@@ -237,9 +237,21 @@ final class NewsStore: ObservableObject {
         let now = Date.now
         let fresh = stories.filter { ($0.published == .distantPast || now.timeIntervalSince($0.published) <= Self.maxAge) && inRegions($0) }
         if let topic = section.topic {
-            // newest first; with US news on, Al Jazeera-only stories count as six hours older
-            let key = { (s: Story) in s.published.addingTimeInterval(self.outletPenalty(s) > 0 ? -6 * 3600 : 0) }
-            let newest = fresh.filter { $0.newsSection == topic }.sorted { key($0) > key($1) }
+            // newest first, leaning towards what you've asked for: stories on your topics count as
+            // six hours newer, and in World and Finance ones from the places you follow three hours
+            // newer and from elsewhere six hours older (nothing is hidden); with US news on,
+            // Al Jazeera-only stories count as six hours older
+            let all = stories.filter { $0.published == .distantPast || now.timeIntervalSince($0.published) <= Self.maxAge }
+            let placed = topic == .world || topic == .finance
+            let key = { (s: Story) -> Date in
+                var shift: TimeInterval = self.outletPenalty(s) > 0 ? -6 * 3600 : 0
+                if self.matchesInterests(s) { shift += 6 * 3600 }
+                if placed, !self.regions.isEmpty, let r = s.region, Self.allRegions.contains(r) {
+                    shift += self.regions.contains(r) ? 3 * 3600 : -6 * 3600
+                }
+                return s.published.addingTimeInterval(shift)
+            }
+            let newest = all.filter { $0.newsSection == topic }.sorted { key($0) > key($1) }
             return Self.varied(newest, byRegion: topic == .finance || topic == .world)
         }
         return forYou(fresh, now: now)

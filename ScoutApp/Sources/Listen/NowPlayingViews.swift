@@ -406,34 +406,31 @@ struct PlayMyBriefings: View {
             Button { Task { await play() } } label: {
                 HStack(spacing: 14) {
                     ZStack {
-                        Circle().fill(.white.opacity(0.22))
+                        Circle().fill(Theme.accent)
+                        Circle().strokeBorder(Theme.accent.opacity(0.25), lineWidth: 5).padding(-5)
                         if busy && !mine {
                             ProgressView().tint(.white)
                         } else {
                             Image(systemName: on ? "pause.fill" : "play.fill")
-                                .font(.system(size: 18, weight: .black)).foregroundStyle(.white)
+                                .font(.system(size: 16, weight: .black)).foregroundStyle(.white)
                                 .offset(x: on ? 0 : 1.5)
                                 .contentTransition(.symbolEffect(.replace))
                         }
                     }
-                    .frame(width: 50, height: 50)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(on ? "Playing your briefings" : mine ? "Carry on listening" : words.0)
-                            .font(.system(size: 18, weight: .heavy)).tracking(-0.2)
+                    .frame(width: 44, height: 44)
+                    .padding(5)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Your \(Intro.edition.lowercased()) briefing").scoutLabel()
+                        Text(on ? "Playing now" : mine ? "Carry on listening" : words.0)
+                            .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
                         Text(on || mine ? sections.map(\.title).joined(separator: " · ") : "\(words.1) · \(minutes) min")
-                            .font(.system(size: 13, weight: .medium)).opacity(0.85).lineLimit(1)
+                            .font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(1)
                     }
-                    .foregroundStyle(.white)
                     Spacer(minLength: 0)
-                    if on { ClockVisual(tint: .white) } else {
-                        Image(systemName: "headphones").font(.system(size: 20, weight: .semibold)).foregroundStyle(.white.opacity(0.8))
-                    }
+                    if on { ClockVisual() }
                 }
-                .padding(.horizontal, 14).padding(.vertical, 13)
-                .background {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .fill(LinearGradient(colors: [Theme.accent, Theme.accent.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                }
+                .padding(.leading, 8).padding(.trailing, 16).padding(.vertical, 10)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
             .buttonStyle(PressStyle())
             .sensoryFeedback(.selection, trigger: on)
@@ -463,7 +460,7 @@ struct PlayMyBriefings: View {
         guard !urls.isEmpty else { return }
         let first = sections.first.flatMap { store.briefing.section($0) }
         speaker.play(id, title: "Your briefings", urls: urls,
-                     info: NowPlaying(title: first?.title ?? "Your briefings", subtitle: "Your briefings"), titles: titles)
+                     info: NowPlaying(title: first?.title ?? "Your briefings", subtitle: "Your \(Intro.edition.lowercased()) briefing", cover: true), titles: titles)
         lastPlayed = Intro.current
         Stats.played("briefing", id: "all", title: "Play my briefings")
     }

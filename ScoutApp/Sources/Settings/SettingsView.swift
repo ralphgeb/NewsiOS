@@ -139,28 +139,10 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 plusSection
-                notificationsSection
                 newsSection
+                notificationsSection
                 appearanceSection
                 iconSection
-                todaySection
-                Section {
-                    ForEach(Topic.allCases) { t in
-                        Toggle(t.title, isOn: Binding(
-                            get: { PlayAll.sections(playAll).contains(t) },
-                            set: { on in
-                                var set = Set(PlayAll.sections(playAll))
-                                if on { set.insert(t) } else if set.count > 1 { set.remove(t) }
-                                playAll = Topic.allCases.filter(set.contains).map(\.rawValue).joined(separator: ",")
-                            }))
-                        .tint(Theme.accent)
-                    }
-                } header: {
-                    Text("Play my briefings")
-                } footer: {
-                    Text("The briefings the Play my briefings button on Today plays, one after another, in this order.")
-                }
-                .listRowBackground(Theme.card)
                 Section {
                     if !hasPlus {
                         Button("Restore purchases") { Task { await PlusStore.shared.restore() } }
@@ -171,12 +153,16 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Theme.card)
                 Section("How Scout works") {
-                    explainer("Today", "By 6:00 each morning the ScoutAI updater reads about 160 news sites, and AI writes a briefing for Tech, Finance, World and Fashion (World and Finance cover the US, the UK, Europe and Asia). Today shows your For you front page: the main events, the key stories and what to watch. Pull Today down to refresh.")
-                    explainer("For you", "Stories on your topics, ranked by importance: how big the story is (an AI score and its market impact), how many outlets cover it and how recent it is. The day's very biggest stories are mixed in, and no more than three in a row share a topic. Scout reads about 150 news sites from the UK, the US, Europe and Asia. The sections run newest first.")
-                    explainer("Stocks", "Prices for about 3,500 stocks, indices, currencies and cryptos update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Stocks you follow, America's biggest companies and the stocks in the news also get charts and key numbers; the ones you follow and the biggest get an AI summary each morning.")
+                    explainer("Briefings", "Twice a day, by 6:00 and by 16:30 UK time, Scout reads about 180 news sites from the US, the UK, Europe and Asia, and AI writes a briefing for Tech, Finance, World and Fashion: what happened, why it matters and what to watch. Pull any page down to refresh.")
+                    explainer("For you", "Today's front page: stories on your topics, ranked by how big they are (an AI score and market impact), how many outlets cover them and how recent they are, with the day's biggest stories mixed in and no more than three in a row on one topic.")
+                    explainer("Sections", "Tech, Finance, World and Fashion run newest first, with the stories on your topics and from the places you follow moved up, a mix of outlets and regions at the top, and nothing hidden.")
+                    explainer("Listening", "With Scout Plus every briefing is read aloud, and Play my briefings on Today plays them one after another. Any story can be played too: the first time anyone plays it, it's recorded in a few seconds and kept for everyone.")
+                    explainer("Stocks", "Prices for about 3,500 stocks, indices, currencies and cryptos update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Stocks you follow, America's biggest companies and the stocks in the news also get charts, key numbers and a daily AI summary.")
                     explainer("Market impact", "Which companies a story could move, up or down, and by how much: one dot is low, three is high. Tap a company for every story that names it.")
                 }
                 .listRowBackground(Theme.card)
+                updatesSection
+                if Plus.isTestFlight { testFlightSection }
                 Section {
                 } footer: {
                     Text("Scout's summaries are written by AI, and it can get things wrong now and then, so please don't treat anything here as financial advice. Every story links to the original if you'd like to read more.")
@@ -247,16 +233,8 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
             }
-            if Plus.isTestFlight {
-                // testing only: switch Scout Plus off to see what's free, and back on
-                Toggle("Test as a free user", isOn: $testAsFree)
-                    .tint(Theme.accent)
-                    .onChange(of: testAsFree) { _, _ in Task { await PlusStore.shared.refresh() } }
-            }
         } footer: {
-            if Plus.isTestFlight {
-                Text(testAsFree ? "TestFlight: Scout Plus is off so you can try the free version. Switch it off to get your subscription back." : "TestFlight only: \"Test as a free user\" resets Scout Plus on this phone, without cancelling the sandbox subscription.")
-            } else if hasPlus {
+            if hasPlus {
                 Text("Through the App Store.")
             }
         }
@@ -271,16 +249,58 @@ struct SettingsView: View {
 
     private var newsSection: some View {
         Section {
+            RegionChips()
+                .padding(.vertical, 6)
             NavigationLink {
                 TopicsPage()
             } label: {
                 row("Your topics", store.interests.isEmpty ? "None yet" : "\(store.interests.count)")
             }
-            RegionChips()
-                .padding(.vertical, 6)
+            NavigationLink {
+                subpage("What to play") { playAllSection }
+            } label: {
+                row("What to play in your briefings", "\(PlayAll.sections(playAll).count) of 4")
+            }
+            NavigationLink {
+                subpage("Today") { todaySection }
+            } label: {
+                row("What to see on Today", "")
+            }
             Picker("Notification briefing", selection: $store.topic) {
                 ForEach(Topic.allCases) { Text($0.title).tag($0) }
             }
+        } header: {
+            Text("News")
+        } footer: {
+            Text("World and Finance lean towards the places you pick; Tech, Finance, World and Fashion lean towards your topics.")
+        }
+        .listRowBackground(Theme.card)
+    }
+
+    /// Which briefings Play my briefings plays, in order.
+    private var playAllSection: some View {
+        Section {
+            ForEach(Topic.allCases) { t in
+                Toggle(t.title, isOn: Binding(
+                    get: { PlayAll.sections(playAll).contains(t) },
+                    set: { on in
+                        var set = Set(PlayAll.sections(playAll))
+                        if on { set.insert(t) } else if set.count > 1 { set.remove(t) }
+                        playAll = Topic.allCases.filter(set.contains).map(\.rawValue).joined(separator: ",")
+                    }))
+                .tint(Theme.accent)
+            }
+        } header: {
+            Text("Play my briefings")
+        } footer: {
+            Text("The briefings Play my briefings on Today plays, one after another, in this order.")
+        }
+        .listRowBackground(Theme.card)
+    }
+
+    /// When the news last came in, and a way to fetch it now: at the bottom, out of the way.
+    private var updatesSection: some View {
+        Section {
             Button {
                 Task { await store.refresh() }
             } label: {
@@ -299,9 +319,38 @@ struct SettingsView: View {
             row("Last update", store.updated.map { $0.formatted(.dateTime.weekday(.abbreviated).hour().minute()) } ?? "–")
             row("Stories", store.stories.count.formatted())
         } header: {
-            Text("News")
+            Text("Updates")
         }
         .listRowBackground(Theme.card)
+    }
+
+    /// TestFlight builds only: switches for trying things out. The App Store build never shows this.
+    private var testFlightSection: some View {
+        Section {
+            Toggle("Test as a free user", isOn: $testAsFree)
+                .tint(Theme.accent)
+                .onChange(of: testAsFree) { _, _ in Task { await PlusStore.shared.refresh() } }
+            Button("Hear the friendly opening again") { Intro.reset() }
+            Button("Show the welcome again") { onboarded = false; dismiss() }
+            Link("Scout numbers (halopro.xyz)", destination: URL(string: "https://halopro.xyz/scout/")!)
+            row("Version", "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")
+        } header: {
+            Text("TestFlight")
+        } footer: {
+            Text(testAsFree ? "Scout Plus is off on this phone so you can try the free version; switch it off to get your subscription back." : "Only in TestFlight builds. Test as a free user turns Scout Plus off on this phone without cancelling the sandbox subscription.")
+        }
+        .listRowBackground(Theme.card)
+    }
+
+    /// A page inside Settings, in Settings' own look.
+    private func subpage<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
+        Form { content() }
+            .scrollContentBackground(.hidden)
+            .background(Theme.background.ignoresSafeArea())
+            .foregroundStyle(Theme.text)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toggleStyle(SwitchToggleStyle(tint: Theme.accent))
     }
 
     // MARK: Appearance (the same as Halo's)
@@ -479,6 +528,10 @@ struct SettingsView: View {
                 .onChange(of: transitCity) { _, _ in Task { await tube.refresh(force: true) } }
             }
             Toggle("Markets", isOn: cardShown("markets"))
+            Toggle("Top stories", isOn: cardShown("top"))
+            Toggle("In brief", isOn: cardShown("brief"))
+            Toggle("More stories", isOn: cardShown("more"))
+            Toggle("Companies to watch", isOn: cardShown("movers"))
             // Apple Weather's credit, which Apple asks apps using its forecasts to show
             HStack {
                 Text("\u{F8FF} Weather")
@@ -490,6 +543,8 @@ struct SettingsView: View {
             .task { weatherSources = try? await WeatherService.shared.attribution.legalPageURL }
         } header: {
             Text("On Today")
+        } footer: {
+            Text("Switch off the cards you don't want on Today.")
         }
         .listRowBackground(Theme.card)
     }

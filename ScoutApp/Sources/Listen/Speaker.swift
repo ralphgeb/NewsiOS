@@ -1,4 +1,5 @@
 import AVFoundation
+import UIKit
 import MediaPlayer
 import SwiftUI
 import WidgetKit
@@ -45,6 +46,8 @@ struct NowPlaying: Equatable {
     var storyID: String?
     /// The briefing's section, when a briefing is playing.
     var section: String?
+    /// Play my briefings: the Lock Screen shows Scout's own cover for the edition.
+    var cover: Bool = false
 }
 
 /// Plays briefings and stories: the Scout service's recordings (Google's Chirp 3: HD voice), or
@@ -179,6 +182,7 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
             let index = await AudioIndex.load()
             guard let self, self.playing == id else { return }
             let url = index?.storyURL(s.id) ?? AudioIndex.base?.appending(path: "audio/story/\(s.id).mp3")
+                .appending(queryItems: [URLQueryItem(name: "wav", value: "1")])   // this build plays Gemini's WAV recordings
             let recorded = index?.storyURL(s.id) != nil
             // fetch the recording; if it takes more than a second, the hold-on line starts
             let fetch = Task { () -> URL? in
@@ -187,7 +191,8 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
                 req.timeoutInterval = 45
                 guard let (data, resp) = try? await URLSession.shared.data(for: req),
                       (resp as? HTTPURLResponse)?.statusCode == 200, data.count > 1000 else { return nil }
-                let file = FileManager.default.temporaryDirectory.appending(path: "story-\(s.id).mp3")
+                let wav = (resp as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")?.contains("wav") == true
+                let file = FileManager.default.temporaryDirectory.appending(path: "story-\(s.id).\(wav ? "wav" : "mp3")")
                 try? data.write(to: file, options: .atomic)
                 return file
             }
@@ -272,10 +277,15 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         now = info
         clock.reset()
         artwork = nil
+        if info.cover, let img = NowPlayingArt.cover(edition: Intro.edition) {
+            artwork = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+        }
         updateNowPlaying()
-        if let url = info.artwork {
+        if !info.cover {
             Task { [weak self] in
-                guard let img = await ImageLoader.shared.image(url), let self, self.playing == id else { return }
+                var picture: UIImage?
+                if let url = info.artwork { picture = await ImageLoader.shared.image(url) }
+                guard let self, self.playing == id, let img = NowPlayingArt.badged(picture) else { return }
                 self.artwork = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
                 self.updateNowPlaying()
             }
@@ -414,6 +424,10 @@ enum Intro {
     }
 
     static var due: Bool { Shared.defaults.string(forKey: key) != current }
+    /// TestFlight: hear the opening again.
+    static func reset() { Shared.defaults.removeObject(forKey: key) }
+    /// "Morning" or "Evening", now.
+    static var edition: String { current.hasSuffix("Evening") ? "Evening" : "Morning" }
     static func markPlayed() { Shared.defaults.set(current, forKey: key) }
 
     /// What to play for a section: its opening first when one is due, then the briefing.
@@ -643,6 +657,70 @@ enum PlayBriefing {
             await speaker.waitUntilSounding()
         } else if let brief {
             speaker.play(id, title: "\(topic.title) briefing", parts: BriefingListen.parts(brief), info: info)
+        }
+    }
+}
+
+/// Pictures for the Lock Screen and Control Centre: Scout's own cover for a full briefing ("Your
+/// morning briefing", the date), and for anything else its picture with Scout's mark in the corner.
+@MainActor
+enum NowPlayingArt {
+    static func cover(edition: String) -> UIImage? {
+        let r = ImageRenderer(content: Cover(edition: edition))
+        r.scale = 3
+        return r.uiImage
+    }
+
+    static func badged(_ picture: UIImage?) -> UIImage? {
+        let r = ImageRenderer(content: Badged(picture: picture))
+        r.scale = 3
+        return r.uiImage
+    }
+
+    private struct Cover: View {
+        let edition: String
+        var body: some View {
+            ZStack {
+                LinearGradient(colors: [Color(red: 0.07, green: 0.11, blue: 0.19), Color(red: 0.12, green: 0.17, blue: 0.29)],
+                               startPoint: .top, endPoint: .bottom)
+                Circle().fill(Color(red: 0.89, green: 0.33, blue: 0.33).opacity(0.18)).frame(width: 260).offset(x: 90, y: -110).blur(radius: 30)
+                VStack(alignment: .leading, spacing: 10) {
+                    ScoutMark(color: .white).frame(width: 64, height: 64)
+                    Spacer()
+                    Text("Your \(edition.lowercased()) briefing")
+                        .font(.system(size: 30, weight: .heavy)).tracking(-0.5).foregroundStyle(.white)
+                    Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                        .font(.system(size: 17, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                    HStack(spacing: 6) {
+                        Circle().fill(Color(red: 0.89, green: 0.33, blue: 0.33)).frame(width: 8, height: 8)
+                        Text("SCOUT").font(.system(size: 12, weight: .bold)).tracking(2).foregroundStyle(.white.opacity(0.6))
+                    }
+                    .padding(.top, 6)
+                }
+                .padding(28)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
+            .frame(width: 300, height: 300)
+        }
+    }
+
+    private struct Badged: View {
+        let picture: UIImage?
+        var body: some View {
+            ZStack(alignment: .bottomLeading) {
+                if let picture {
+                    Image(uiImage: picture).resizable().scaledToFill().frame(width: 300, height: 300).clipped()
+                } else {
+                    LinearGradient(colors: [Color(red: 0.07, green: 0.11, blue: 0.19), Color(red: 0.12, green: 0.17, blue: 0.29)],
+                                   startPoint: .top, endPoint: .bottom)
+                }
+                ScoutMark(color: .white)
+                    .frame(width: 30, height: 30)
+                    .padding(7)
+                    .background(Color(red: 0.07, green: 0.11, blue: 0.19).opacity(0.85), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .padding(14)
+            }
+            .frame(width: 300, height: 300)
         }
     }
 }
