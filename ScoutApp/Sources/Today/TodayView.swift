@@ -22,7 +22,7 @@ struct TodayView: View {
     var body: some View {
         let page = store.frontPage(edition: editionID)
         NavigationStack(path: $path) {
-            ScoutPage(showSettings: $showSettings, title: "Today", subtitle: subtitle, editing: $editing,
+            ScoutPage(showSettings: $showSettings, title: "Today", subtitle: subtitle,
                       onRefresh: {
                           async let news: Void = store.refresh()
                           async let sky: Void = weather.refresh(force: true)
@@ -30,8 +30,9 @@ struct TodayView: View {
                           _ = await (news, sky, trains)
                       }, isRefreshing: store.isLoading) {
                 if let page {
-                    if !editing { PlayMyBriefings() }
                     ForEach(visible(page)) { card in
+                        // Play my briefings sits just above Top stories
+                        if card == .top { PlayMyBriefings() }
                         editableCard(card, page: page)
                     }
                     if editing {
@@ -61,11 +62,9 @@ struct TodayView: View {
         .sensoryFeedback(.selection, trigger: editionID)
     }
 
-    /// "Tuesday 27 October · updated 10h ago", on one line like the other tabs.
+    /// "Tuesday 27 October".
     private var subtitle: String {
-        let day = Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))
-        guard let u = store.updated else { return day }
-        return Calendar.current.isDateInToday(u) ? "\(day) · compiled at \(Format.time(u))" : day
+        Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))
     }
 
     // MARK: Order and hiding

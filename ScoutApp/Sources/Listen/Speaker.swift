@@ -22,6 +22,19 @@ final class PlaybackClock: ObservableObject {
     func reset() { progress = 0; elapsed = 0; duration = 0 }
 }
 
+/// Which tab is on screen and which tabs have a story open (there the tab bar steps aside for the
+/// story's own bar). Apart from the player, so a tab change doesn't redraw every audio view.
+@MainActor
+final class TabBarState: ObservableObject {
+    static let shared = TabBarState()
+    @Published private(set) var storyPages: [Int: Int] = [:]
+    @Published var currentTab = 0 { didSet { if currentTab == oldValue { return } } }
+    var storyOnScreen: Bool { storyPages[currentTab, default: 0] > 0 }
+    func storyPage(in tab: Int, open: Bool) {
+        storyPages[tab] = max(0, storyPages[tab, default: 0] + (open ? 1 : -1))
+    }
+}
+
 /// What's playing, for the mini player, the story page and the Lock Screen / Control Centre.
 struct NowPlaying: Equatable {
     var title: String
@@ -56,14 +69,7 @@ final class Speaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
     /// Titles for the recordings in a playlist (Play my briefings), shown as each one starts.
     private var itemTitles: [ObjectIdentifier: (title: String, subtitle: String)] = [:]
     private weak var lastTitledItem: AVPlayerItem?
-    /// Story pages open in each tab: there the tab bar steps aside for the story's own bar.
-    @Published private(set) var storyPages: [Int: Int] = [:]
-    /// The tab on screen.
-    @Published var currentTab = 0
-    var storyOnScreen: Bool { storyPages[currentTab, default: 0] > 0 }
-    func storyPage(in tab: Int, open: Bool) {
-        storyPages[tab] = max(0, storyPages[tab, default: 0] + (open ? 1 : -1))
-    }
+
 
     /// Tells the Listen widget which briefing is playing, so its button shows pause.
     private func share() {

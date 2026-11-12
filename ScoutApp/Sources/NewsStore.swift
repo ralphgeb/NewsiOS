@@ -45,8 +45,8 @@ struct FrontPage {
 
 @MainActor
 final class NewsStore: ObservableObject {
-    @Published private(set) var stories: [Story] = []
-    @Published private(set) var briefing = Briefing()
+    @Published private(set) var stories: [Story] = [] { didSet { invalidate(); words.removeAll(); people.removeAll() } }
+    @Published private(set) var briefing = Briefing() { didSet { invalidate() } }
     @Published private(set) var updated: Date?
     @Published private(set) var isLoading = false
     @Published private(set) var lastError: String?
@@ -57,6 +57,7 @@ final class NewsStore: ObservableObject {
 
     @Published var topic: Topic {
         didSet {
+            invalidate()
             guard topic != oldValue else { return }
             Shared.topic = topic
         }
@@ -64,15 +65,39 @@ final class NewsStore: ObservableObject {
 
     @Published var interests: Set<String> {
         didSet {
-            UserDefaults.standard.set(interests.sorted(), forKey: Self.interestsKey)
-            Shared.defaults.set(interests.sorted(), forKey: Shared.interestsKey)   // for the Headlines widget
-            WidgetCenter.shared.reloadTimelines(ofKind: Shared.headlinesKind)
+            guard interests != oldValue else { return }
+            invalidate()
+            // saved and the widget told a moment later, so ticking several topics stays instant
+            widgetSave?.cancel()
+            widgetSave = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(700))
+                guard let self, !Task.isCancelled else { return }
+                UserDefaults.standard.set(self.interests.sorted(), forKey: Self.interestsKey)
+                Shared.defaults.set(self.interests.sorted(), forKey: Shared.interestsKey)   // for the Headlines widget
+                WidgetCenter.shared.reloadTimelines(ofKind: Shared.headlinesKind)
+            }
         }
+    }
+    private var widgetSave: Task<Void, Never>?
+
+    // MARK: Remembered results
+    // For you, the sections and the front page are worked out once and kept until the news, the
+    // briefing or your choices change, instead of on every redraw (tab switches, opening a story).
+    private var memoFront: [String: FrontPage?] = [:]
+    private var memoItems: [NewsSection: [Story]] = [:]
+    /// Each headline's words and names, worked out once per story.
+    private var words: [String: Set<String>] = [:]
+    private var people: [String: Set<String>] = [:]
+
+    private func invalidate() {
+        memoFront.removeAll()
+        memoItems.removeAll()
     }
 
     /// The regions World and Finance (and For you's world and market stories) come from.
     @Published var regions: Set<String> {
         didSet {
+            invalidate()
             UserDefaults.standard.set(regions.sorted(), forKey: Self.regionsKey)
             Shared.defaults.set(regions.sorted(), forKey: Shared.regionsKey)
             if regions.contains("US") != oldValue.contains("US") { rebuild() }
@@ -202,6 +227,13 @@ final class NewsStore: ObservableObject {
     private static let maxAge: TimeInterval = 72 * 3600
 
     func newsItems(_ section: NewsSection) -> [Story] {
+        if let hit = memoItems[section] { return hit }
+        let out = computeItems(section)
+        memoItems[section] = out
+        return out
+    }
+
+    private func computeItems(_ section: NewsSection) -> [Story] {
         let now = Date.now
         let fresh = stories.filter { ($0.published == .distantPast || now.timeIntervalSince($0.published) <= Self.maxAge) && inRegions($0) }
         if let topic = section.topic {
@@ -232,14 +264,14 @@ final class NewsStore: ObservableObject {
         let scores = Dictionary(picked.map { s in
             (s.id, rankScore(s, now: now) + (interests.isEmpty ? 0 : (matchesInterests(s) ? 4 : 0) + Self.regionWeight(s)))
         }, uniquingKeysWith: { a, _ in a })
-        var queue = Self.withoutRepeats(picked.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) })
+        var queue = withoutRepeats(picked.sorted { (scores[$0.id] ?? 0) > (scores[$1.id] ?? 0) })
         // never two stories about the same thing in a row (two Jensen Huang stories, say), and
         // never more than three in a row on one topic: the next one waits its turn
         var out: [Story] = []
         while !queue.isEmpty {
             let recent = out.suffix(3).compactMap { $0.topics?.first }
             let crowded = { (s: Story) in recent.count == 3 && Set(recent).count == 1 && s.topics?.first == recent[0] }
-            let i = queue.prefix(10).firstIndex { s in !crowded(s) && !(out.last.map { Self.similar($0, s) } ?? false) } ?? 0
+            let i = queue.prefix(10).firstIndex { s in !crowded(s) && !(out.last.map { similar($0, s) } ?? false) } ?? 0
             out.append(queue.remove(at: i))
         }
         return out
@@ -265,25 +297,35 @@ final class NewsStore: ObservableObject {
             .union((s.stocks ?? []).prefix(2).map { $0.ticker.lowercased() })
     }
 
+    private func kw(_ s: Story) -> Set<String> {
+        if let k = words[s.id] { return k }
+        let k = Self.keywords(s); words[s.id] = k; return k
+    }
+
+    private func nm(_ s: Story) -> Set<String> {
+        if let k = people[s.id] { return k }
+        let k = Self.names(s); people[s.id] = k; return k
+    }
+
     /// About the same thing: they share a name (a person, a company, a ticker) or much of the headline.
-    static func similar(_ a: Story, _ b: Story) -> Bool {
-        if !names(a).isDisjoint(with: names(b)) { return true }
-        let ka = keywords(a), kb = keywords(b)
+    func similar(_ a: Story, _ b: Story) -> Bool {
+        if !nm(a).isDisjoint(with: nm(b)) { return true }
+        let ka = kw(a), kb = kw(b)
         guard !ka.isEmpty, !kb.isEmpty else { return false }
         return Double(ka.intersection(kb).count) / Double(ka.union(kb).count) >= 0.3
     }
 
     /// Drops near-copies of a story higher up (the same event told by two outlets).
-    static func withoutRepeats(_ list: [Story]) -> [Story] {
+    func withoutRepeats(_ list: [Story]) -> [Story] {
         var out: [Story] = []
+        var kept: [Set<String>] = []
         for s in list {
-            let ks = keywords(s)
-            let copy = out.contains { o in
-                let ko = keywords(o)
+            let ks = kw(s)
+            let copy = kept.contains { ko in
                 guard !ks.isEmpty, !ko.isEmpty else { return false }
                 return Double(ks.intersection(ko).count) / Double(ks.union(ko).count) >= 0.55
             }
-            if !copy { out.append(s) }
+            if !copy { out.append(s); kept.append(ks) }
         }
         return out
     }
@@ -320,6 +362,14 @@ final class NewsStore: ObservableObject {
     /// Today's front page: the latest briefing for your topic, or the biggest stories of the last
     /// 30 hours while the first one is being written.
     func frontPage(edition: String?) -> FrontPage? {
+        let key = edition ?? ""
+        if let hit = memoFront[key] { return hit }
+        let out = computeFront(edition: edition)
+        memoFront[key] = out
+        return out
+    }
+
+    private func computeFront(edition: String?) -> FrontPage? {
         if !interests.isEmpty { return forYouPage() }
         let since = Date.now.addingTimeInterval(-30 * 3600)
         let pool = stories
@@ -426,8 +476,17 @@ final class NewsStore: ObservableObject {
         return (try? Feed.decoder.decode([HistoryEntry].self, from: data)) ?? []
     }
 
+    private static let saveQueue = DispatchQueue(label: "scout.history", qos: .utility)
+
+    /// Written in the background, so opening a story never waits for the disk.
     private func persistHistory() {
-        if let data = try? Feed.encoder.encode(history) { try? data.write(to: Self.historyURL, options: .atomic) }
+        let snapshot = history, url = Self.historyURL
+        Self.saveQueue.async {
+            let e = JSONEncoder()
+            e.keyEncodingStrategy = .convertToSnakeCase
+            e.dateEncodingStrategy = .iso8601
+            if let data = try? e.encode(snapshot) { try? data.write(to: url, options: .atomic) }
+        }
     }
 
     // MARK: Saved

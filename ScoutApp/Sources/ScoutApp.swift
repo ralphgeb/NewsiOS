@@ -148,7 +148,7 @@ struct RootView: View {
         // the tab you're on is highlighted in the accent
         .tint(Theme.accent)
         .sensoryFeedback(.selection, trigger: tab)
-        .onChange(of: tab, initial: true) { _, t in Speaker.shared.currentTab = t }
+        .onChange(of: tab, initial: true) { _, t in TabBarState.shared.currentTab = t }
         .task { await store.refreshIfStale() }
         .sheet(isPresented: $showPlus) { PlusSheet(reason: "Listening to the briefings is part of Scout Plus.") }
         .task { Plus.share() }
@@ -195,13 +195,14 @@ enum DeepLink {
 /// with the player as its accessory (iOS 26.1).
 private struct PlayerTabBar: ViewModifier {
     @ObservedObject private var speaker = Speaker.shared
+    @ObservedObject private var bar = TabBarState.shared
 
     func body(content: Content) -> some View {
         if #available(iOS 26.1, *) {
             // the tab bar stays open, and shrinks to a circle beside the player only while audio plays
             content
                 .tabBarMinimizeBehavior(speaker.now != nil ? .onScrollDown : .never)
-                .tabViewBottomAccessory(isEnabled: speaker.now != nil && !speaker.storyOnScreen) { NowPlayingAccessory() }
+                .tabViewBottomAccessory(isEnabled: speaker.now != nil && !bar.storyOnScreen) { NowPlayingAccessory() }
         } else if #available(iOS 26, *) {
             content.tabBarMinimizeBehavior(speaker.now != nil ? .onScrollDown : .never)
         } else {
@@ -228,12 +229,11 @@ extension View {
 
 private struct StoryTab: ViewModifier {
     let tab: Int
-    @ObservedObject private var speaker = Speaker.shared
+    @ObservedObject private var bar = TabBarState.shared
 
     func body(content: Content) -> some View {
         content
             .environment(\.scoutTab, tab)
-            .toolbar(speaker.storyPages[tab, default: 0] > 0 ? .hidden : .visible, for: .tabBar)
-            .animation(.snappy(duration: 0.25), value: speaker.storyPages[tab, default: 0] > 0)
+            .toolbar(bar.storyPages[tab, default: 0] > 0 ? .hidden : .visible, for: .tabBar)
     }
 }

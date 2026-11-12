@@ -101,6 +101,19 @@ struct OnboardingView: View {
                         .contentTransition(.opacity)
                 }
                 RegionChips(compact: true)
+                // pick everything at once (or clear it)
+                let all = Set(Topic.allCases.flatMap(\.essentials))
+                let everything = all.isSubset(of: store.interests)
+                Button {
+                    withAnimation(.snappy) { store.interests = everything ? [] : store.interests.union(all) }
+                } label: {
+                    Label(everything ? "Clear all" : "Select all", systemImage: everything ? "xmark.circle" : "checkmark.circle")
+                        .font(.system(size: 14, weight: .semibold))
+                        .padding(.horizontal, 14).frame(height: 34)
+                        .background(Theme.card, in: Capsule())
+                        .foregroundStyle(Theme.text)
+                }
+                .buttonStyle(PressStyle())
                 TopicChips(compact: true)
             }
             .padding(.horizontal, 24)

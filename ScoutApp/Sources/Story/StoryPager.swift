@@ -35,7 +35,7 @@ struct StoryPager: View {
     private func leave() {
         guard counted else { return }
         counted = false
-        speaker.storyPage(in: tab, open: false)
+        TabBarState.shared.storyPage(in: tab, open: false)
     }
 
     var body: some View {
@@ -55,9 +55,12 @@ struct StoryPager: View {
         }
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $current)
-        // every story you read goes into History
-        .onAppear { if let story { store.remember(story) } }
-        .onChange(of: current) { _, _ in if let story { store.remember(story) } }
+        // every story you read goes into History: once you've stayed on it a moment, so a swipe
+        // never waits for it
+        .task(id: current) {
+            try? await Task.sleep(for: .milliseconds(700))
+            if !Task.isCancelled, let story { store.remember(story) }
+        }
         .scrollIndicators(.hidden)
         .scrollDisabled(list.count < 2)
         .background(Theme.background.ignoresSafeArea())
@@ -66,7 +69,7 @@ struct StoryPager: View {
         .toolbar(.visible, for: .navigationBar)
         // a story's own bottom bar (Read on, and the player) takes the tab bar's place: the tab
         // hides its bar while the story is open, and shows it again the moment you go back
-        .onAppear { if !counted { counted = true; speaker.storyPage(in: tab, open: true) } }
+        .onAppear { if !counted { counted = true; TabBarState.shared.storyPage(in: tab, open: true) } }
         .onChange(of: isPresented) { _, shown in if !shown { leave() } }
         .onDisappear { leave() }
         .toolbar {

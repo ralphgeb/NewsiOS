@@ -279,13 +279,14 @@ extension View {
 /// Before iOS 26.1 (no tab bar accessory to switch on and off), the player floats above the tab bar.
 private struct NowPlayingInset: ViewModifier {
     @ObservedObject private var speaker = Speaker.shared
+    @ObservedObject private var bar = TabBarState.shared
 
     func body(content: Content) -> some View {
         if #available(iOS 26.1, *) {
             content
         } else {
             content.safeAreaInset(edge: .bottom) {
-                if speaker.now != nil, !speaker.storyOnScreen {
+                if speaker.now != nil, !bar.storyOnScreen {
                     NowPlayingBar()
                         .padding(.horizontal, Design.sideMargin + 4)
                         .padding(.bottom, 6)
@@ -374,11 +375,22 @@ struct PlayMyBriefings: View {
     @ObservedObject private var speaker = Speaker.shared
     @AppStorage(Plus.key) private var hasPlus = false
     @AppStorage(PlayAll.key) private var chosen = PlayAll.defaultValue
+    /// The edition last played, so the title can offer to play it again.
+    @AppStorage("playall.lastPlayed") private var lastPlayed = ""
     @State private var showPlus = false
     @State private var busy = false
+    /// Picked once each time Today opens, so it changes from day to day without flickering.
+    @State private var pick = Int.random(in: 0..<100)
+
+    private static let fresh = [("Catch me up", "on what I missed"), ("Play my briefings", "the news, read to you"),
+                                ("What did I miss?", "your briefings, one after another"), ("Brief me", "a few minutes, all you need"),
+                                ("Listen to today's news", "your briefings, back to back")]
+    private static let again = [("Listen again", "your briefings from the top"), ("Play them again", "in case you missed a bit"),
+                                ("Hear it all again", "your briefings, back to back")]
 
     private var sections: [Topic] { PlayAll.sections(chosen).filter { store.briefing.section($0) != nil } }
     private var id: String { "brief-all-\(Intro.current)-\(sections.map(\.rawValue).joined())" }
+    private var heard: Bool { lastPlayed == Intro.current }
 
     private var minutes: Int {
         let chars = sections.compactMap { store.briefing.section($0) }.flatMap(BriefingListen.parts).reduce(0) { $0 + $1.count }
@@ -389,31 +401,39 @@ struct PlayMyBriefings: View {
         if !sections.isEmpty {
             let on = speaker.isPlaying(id)
             let mine = speaker.playing == id
+            let list = heard ? Self.again : Self.fresh
+            let words = list[pick % list.count]
             Button { Task { await play() } } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: 14) {
                     ZStack {
-                        Circle().fill(Theme.accent)
+                        Circle().fill(.white.opacity(0.22))
                         if busy && !mine {
                             ProgressView().tint(.white)
                         } else {
                             Image(systemName: on ? "pause.fill" : "play.fill")
-                                .font(.system(size: 17, weight: .black)).foregroundStyle(.white)
+                                .font(.system(size: 18, weight: .black)).foregroundStyle(.white)
                                 .offset(x: on ? 0 : 1.5)
                                 .contentTransition(.symbolEffect(.replace))
                         }
                     }
-                    .frame(width: 48, height: 48)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(on ? "Playing your briefings" : mine ? "Resume your briefings" : "Play my briefings")
-                            .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.text)
-                        Text("\(sections.map(\.title).joined(separator: ", ")) · \(minutes) min")
-                            .font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(1)
+                    .frame(width: 50, height: 50)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(on ? "Playing your briefings" : mine ? "Carry on listening" : words.0)
+                            .font(.system(size: 18, weight: .heavy)).tracking(-0.2)
+                        Text(on || mine ? sections.map(\.title).joined(separator: " · ") : "\(words.1) · \(minutes) min")
+                            .font(.system(size: 13, weight: .medium)).opacity(0.85).lineLimit(1)
                     }
+                    .foregroundStyle(.white)
                     Spacer(minLength: 0)
-                    if on { ClockVisual() }
+                    if on { ClockVisual(tint: .white) } else {
+                        Image(systemName: "headphones").font(.system(size: 20, weight: .semibold)).foregroundStyle(.white.opacity(0.8))
+                    }
                 }
-                .padding(12)
-                .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .padding(.horizontal, 14).padding(.vertical, 13)
+                .background {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(LinearGradient(colors: [Theme.accent, Theme.accent.opacity(0.78)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                }
             }
             .buttonStyle(PressStyle())
             .sensoryFeedback(.selection, trigger: on)
@@ -444,14 +464,16 @@ struct PlayMyBriefings: View {
         let first = sections.first.flatMap { store.briefing.section($0) }
         speaker.play(id, title: "Your briefings", urls: urls,
                      info: NowPlaying(title: first?.title ?? "Your briefings", subtitle: "Your briefings"), titles: titles)
+        lastPlayed = Intro.current
         Stats.played("briefing", id: "all", title: "Play my briefings")
     }
 }
 
 /// The moving bars, watching the clock (so only this redraws as it plays).
 private struct ClockVisual: View {
+    var tint: Color = Theme.accent
     @ObservedObject private var clock = Speaker.shared.clock
-    var body: some View { PlaybackVisual(style: .bars, playing: true, progress: clock.progress, size: 20) }
+    var body: some View { PlaybackVisual(style: .bars, playing: true, progress: clock.progress, size: 20, tint: tint) }
 }
 
 /// Which sections Play my briefings plays, in order (Settings).
