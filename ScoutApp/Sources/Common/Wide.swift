@@ -10,6 +10,10 @@ enum WideLayout: String, CaseIterable, Identifiable {
     case automatic, on, off
     var id: String { rawValue }
     static let key = "layout.wide"
+    /// TestFlight builds open in the fold layout straight away; the App Store version picks it on wide screens.
+    static var defaultValue: String { (Plus.isTestFlight ? WideLayout.on : .automatic).rawValue }
+    /// Wider than this (in points) is the open, inner screen: two columns.
+    static let openWidth: CGFloat = 600
     var title: String {
         switch self {
         case .automatic: return "Automatic (inner screen)"
@@ -23,7 +27,7 @@ enum WideLayout: String, CaseIterable, Identifiable {
         switch WideLayout(rawValue: setting) ?? .automatic {
         case .on: return true
         case .off: return false
-        case .automatic: return width >= 700 || sizeClass == .regular
+        case .automatic: return width >= openWidth || sizeClass == .regular
         }
     }
 }
@@ -68,7 +72,7 @@ struct WideRoot: View {
 
     var body: some View {
         GeometryReader { g in
-            let two = g.size.width >= 700
+            let two = g.size.width >= WideLayout.openWidth
             let rail: CGFloat = two ? 76 : 64
             let todayWidth = min(max((g.size.width - rail) * 0.42, 360), 520)
             HStack(spacing: 0) {

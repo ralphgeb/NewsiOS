@@ -104,7 +104,7 @@ struct RootView: View {
     @State private var showPlus = false
     @State private var tab = 0
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @AppStorage(WideLayout.key) private var wideSetting = WideLayout.automatic.rawValue
+    @AppStorage(WideLayout.key) private var wideSetting = WideLayout.defaultValue
 
     var body: some View {
         GeometryReader { g in

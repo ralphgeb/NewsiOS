@@ -130,7 +130,7 @@ struct SettingsView: View {
     @AppStorage(Plus.sourceKey) private var plusSource = ""
     @AppStorage(Plus.freeStyleKey) private var freeStyle = "scout"
     @AppStorage(Plus.testFreeKey) private var testAsFree = false
-    @AppStorage(WideLayout.key) private var wideLayout = WideLayout.automatic.rawValue
+    @AppStorage(WideLayout.key) private var wideLayout = WideLayout.defaultValue
     @AppStorage(PlayAll.key) private var playAll = PlayAll.defaultValue
     @State private var showPlus = false
     @State private var previewNote = false

@@ -31,6 +31,8 @@ targets:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIBackgroundModes:
           - fetch
           - audio          # Listen keeps reading with the screen locked
