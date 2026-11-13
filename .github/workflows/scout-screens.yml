@@ -1,0 +1,133 @@
+name: Scout – screenshots on the iPhone Duo
+
+# Run by hand: builds Scout for the simulator, creates an iPhone Duo (on whichever iOS simulator
+# runtime supports it), photographs the app closed and opened, and saves the pictures in
+# screens/duo on this branch (and in the run's artifacts).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  screens:
+    runs-on: xcode-27
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest released Xcode
+        run: |
+          best=""; bestv=0
+          for x in $(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -viE "beta|rc|preview"); do
+            v=$(DEVELOPER_DIR="$x/Contents/Developer" xcodebuild -version 2>/dev/null | awk 'NR==1{print $2}')
+            n=$(echo "$v" | awk -F. '{printf "%d%03d%03d", $1, $2, $3}')
+            if [ -n "$v" ] && [ "$n" -gt "$bestv" ]; then best=$x; bestv=$n; fi
+          done
+          if [ -n "$best" ]; then sudo xcode-select -s "$best/Contents/Developer"; fi
+          xcodebuild -version
+
+      - name: What the simulators offer (the Duo's details)
+        run: |
+          xcrun simctl list runtimes
+          xcrun simctl list devicetypes -j | python3 -c "
+          import json,sys
+          for d in json.load(sys.stdin)['devicetypes']:
+              if 'duo' in d['name'].lower() or 'fold' in d['name'].lower(): print(json.dumps(d, indent=1))"
+          echo "== simctl commands about folding / displays:"
+          xcrun simctl help 2>&1 | grep -iE "fold|posture|hinge|display|ui" || true
+          xcrun simctl help ui 2>&1 | head -40 || true
+          xcrun simctl help io 2>&1 | head -40 || true
+
+      - name: Build for the simulator
+        working-directory: ScoutApp
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          set -o pipefail
+          xcodebuild build -project Scout.xcodeproj -scheme Scout -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
+
+      - name: Photograph Scout on the iPhone Duo, closed and opened
+        run: |
+          APP=$(ls -d ScoutApp/build/Build/Products/Debug-iphonesimulator/Scout.app)
+          mkdir -p screens/duo
+          rm -f screens/duo/*.png
+          STORY=$(curl -s https://raw.githubusercontent.com/ralphgeb/ScoutAI/main/data/news.json | python3 -c "
+          import json,sys
+          s=json.load(sys.stdin)['stories']
+          s=sorted([x for x in s if x.get('image')], key=lambda x:(-(x.get('importance') or 0), -len(x.get('sources',[]))))
+          print(s[0]['id'] if s else '')" || true)
+          echo "Story: $STORY"
+          TYPE=$(xcrun simctl list devicetypes -j | python3 -c "
+          import json,sys
+          t=[d for d in json.load(sys.stdin)['devicetypes'] if 'duo' in d['name'].lower()]
+          print(t[0]['identifier'] if t else '')")
+          [ -n "$TYPE" ] || { echo "::error::This runner's Xcode has no iPhone Duo simulator"; exit 1; }
+          # the Duo needs a runtime that supports it: try every iOS runtime, newest first
+          UDID=""
+          for RT in $(xcrun simctl list runtimes -j | python3 -c "
+          import json,sys
+          r=[x for x in json.load(sys.stdin)['runtimes'] if x['platform']=='iOS' and x['isAvailable']]
+          for x in sorted(r,key=lambda x:[int(p) for p in x['version'].split('.')], reverse=True): print(x['identifier'])"); do
+            if UDID=$(xcrun simctl create "Scout Duo" "$TYPE" "$RT" 2>err.txt); then echo "Created the Duo on $RT"; break; fi
+            echo "Not on $RT: $(cat err.txt | tr '\n' ' ')"; UDID=""
+          done
+          if [ -z "$UDID" ]; then
+            echo "No runtime took the Duo: downloading the newest iOS simulator runtime and trying again"
+            xcodebuild -downloadPlatform iOS || true
+            RT=$(xcrun simctl list runtimes -j | python3 -c "
+          import json,sys
+          r=[x for x in json.load(sys.stdin)['runtimes'] if x['platform']=='iOS' and x['isAvailable']]
+          print(sorted(r,key=lambda x:[int(p) for p in x['version'].split('.')])[-1]['identifier'])")
+            UDID=$(xcrun simctl create "Scout Duo" "$TYPE" "$RT") || { echo "::error::The iPhone Duo simulator couldn't be created on any runtime"; exit 1; }
+          fi
+          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryLevel 100 --batteryState charged --cellularBars 4 --wifiBars 3 || true
+          echo "== the Duo's displays:"; xcrun simctl io "$UDID" enumerate 2>&1 | tee displays.txt || true
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.ralphgeb.scout -onboarded YES -layout.wide on
+          sleep 20   # the news, pictures and weather load
+          shoot() {   # $1 name, $2 url (optional): every display the Duo has
+            [ -n "$2" ] && xcrun simctl openurl "$UDID" "$2"
+            sleep 6
+            xcrun simctl io "$UDID" screenshot "screens/duo/$1.png" || true
+          }
+          shoot closed-1-today
+          shoot closed-2-briefings "scout://news?section=Tech"
+          shoot closed-3-stocks "scout://stocks"
+          [ -n "$STORY" ] && shoot closed-4-story "scout://story/$STORY"
+          shoot closed-5-today "scout://today"
+          # open the Duo, if the simulator can unfold it
+          OPENED=""
+          for cmd in "ui $UDID posture flat" "ui $UDID posture open" "ui $UDID fold open" "ui $UDID fold unfolded" "io $UDID posture flat" "ui $UDID hinge 180"; do
+            if xcrun simctl $cmd 2>/dev/null; then echo "Opened with: simctl $cmd"; OPENED=1; sleep 8; break; fi
+          done
+          if [ -n "$OPENED" ]; then
+            shoot open-1-today-briefings "scout://news?section=Tech"
+            shoot open-2-stocks "scout://stocks"
+            [ -n "$STORY" ] && shoot open-3-story "scout://story/$STORY"
+            shoot open-4-history "scout://history"
+          else
+            echo "::warning::No simctl command unfolded the Duo; only the closed screen was photographed"
+          fi
+          # any other displays (an inner screen shown separately)
+          for D in $(grep -oE "[0-9A-F]{8}-[0-9A-F-]{27}" displays.txt | sort -u); do
+            xcrun simctl io "$UDID" screenshot --display="$D" "screens/duo/display-$D.png" 2>/dev/null || true
+          done
+          ls -la screens/duo
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scout-duo-screens
+          path: screens/duo
+
+      - name: Save the pictures on this branch
+        if: always()
+        run: |
+          git config user.name "scout-screens-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add screens/duo
+          git diff --cached --quiet || { git commit -m "Scout on the iPhone Duo: simulator screenshots" && git pull --rebase && git push; }

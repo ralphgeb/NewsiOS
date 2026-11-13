@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   testflight:
-    runs-on: macos-latest
+    runs-on: xcode-27   # Xcode 27 (iOS 27 SDK): needed for the iPhone Duo's full screen
     timeout-minutes: 45
     defaults:
       run:
