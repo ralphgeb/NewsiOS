@@ -236,8 +236,14 @@ struct PageHeader: View {
 /// The gear in a round bubble, top right of every page.
 struct SettingsButton: View {
     @Binding var showSettings: Bool
+    /// In the fold layout Settings lives on the tab rail, so the page's own gear goes.
+    @Environment(\.scoutWide) private var wide
 
     var body: some View {
+        if !wide { gear }
+    }
+
+    private var gear: some View {
         Button { showSettings = true } label: {
             Image(systemName: "gearshape")
                 .font(.system(size: 16))

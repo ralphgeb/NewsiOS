@@ -128,10 +128,20 @@ struct RootView: View {
                 .environmentObject(weather)
                 .environmentObject(tube)
         }
-        .onOpenURL { url in
-            // Widget taps open a page: scout://today, scout://news?section=Tech, scout://story/<id>,
-            // scout://stocks, scout://history. Settings closes and the page starts from its top
-            // (or the story), wherever you'd left it.
+        .onOpenURL { open($0) }
+        // the simulator screenshots start the app on a page (-scoutStartURL scout://stocks)
+        .task {
+            if let s = UserDefaults.standard.string(forKey: "scoutStartURL"), let url = URL(string: s) {
+                try? await Task.sleep(for: .seconds(2))
+                open(url)
+            }
+        }
+    }
+
+    /// Widget taps open a page: scout://today, scout://news?section=Tech, scout://story/<id>,
+    /// scout://stocks, scout://history. Settings closes and the page starts from its top
+    /// (or the story), wherever you'd left it.
+    private func open(_ url: URL) {
             showSettings = false
             if url.host == "plus" { showPlus = true; return }    // a locked widget button
             DeepLink.pending = url          // for a page that isn't on screen yet (a cold start)
@@ -142,7 +152,6 @@ struct RootView: View {
             case "history", "saved": tab = 3
             default: tab = 0
             }
-        }
     }
 
     /// The phone layout: the four tabs along the bottom.

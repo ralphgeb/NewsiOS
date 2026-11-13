@@ -121,7 +121,13 @@ struct WideRoot: View {
         }
         .environment(\.scoutWide, true)
         .onAppear { withAnimation(.spring(response: 0.65, dampingFraction: 0.86).delay(0.35)) { settled = true } }
-        .onReceive(NotificationCenter.default.publisher(for: .scoutShowPage)) { _ in path = NavigationPath() }
+        .onReceive(NotificationCenter.default.publisher(for: .scoutShowPage)) { note in
+            path = NavigationPath()
+            // a link to a story opens it across the screen, beside the tabs
+            if let url = note.object as? URL, url.host == "story", let id = url.pathComponents.dropFirst().first {
+                path.append(StoryRoute(id: id, sequence: [id]))
+            }
+        }
     }
 
     /// Each page stays alive (its scroll position too) while another one shows.
