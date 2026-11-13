@@ -32,6 +32,8 @@ struct NewsView: View {
     }
 
     @State private var path = NavigationPath()
+    /// The opened iPhone Duo held sideways: the briefing on the left, the stories on the right.
+    @Environment(\.scoutWide) private var wide
 
     var body: some View {
         ScoutNavigation(path: $path) {
@@ -123,29 +125,18 @@ struct NewsView: View {
             } else if all.isEmpty {
                 EmptyCard(symbol: "magnifyingglass", title: "Nothing here yet", text: "Try another section.")
             } else {
-                // the latest briefing for the section (no Morning / Evening switch)
                 let cover = section.topic.flatMap { store.briefing.section($0) }
                 let hero = cover == nil ? heroPick(items, section) : nil
-                if let topic = section.topic, let brief = cover {
-                    SectionCover(topic: topic, brief: brief, lead: store.story(brief.leadStoryId), sequence: seq)
-                } else if let hero {
-                    NavigationLink(value: StoryRoute(id: hero.id, sequence: seq)) { HeroCard(story: hero) }
-                        .buttonStyle(PressStyle())
-                        .storyZoomSource(hero.id)
-                }
-                SectionHead(title: "Latest", detail: "\(all.count) stories")
-                // without Scout Plus, the first group of stories is open and everything from the
-                // first big picture card down is locked
-                ForEach(Array(chunks(items.filter { $0.id != hero?.id }).enumerated()), id: \.element.id) { i, chunk in
-                    if let big = chunk.hero {
-                        NavigationLink(value: StoryRoute(id: big.id, sequence: seq)) { HeroCard(story: big) }
-                            .buttonStyle(PressStyle())
-                            .storyZoomSource(big.id)
-                            .locked(paywall && i > 0)
-                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    } else {
-                        StoryList(stories: chunk.rows, sequence: seq, locked: paywall && i > 0)
+                if wide {
+                    HStack(alignment: .top, spacing: 18) {
+                        VStack(spacing: 14) { coverBlock(section, cover: cover, hero: hero, seq: seq) }
+                            .frame(maxWidth: .infinity, alignment: .top)
+                        VStack(spacing: 14) { latestBlock(all: all, items: items, hero: hero, seq: seq) }
+                            .frame(maxWidth: .infinity, alignment: .top)
                     }
+                } else {
+                    coverBlock(section, cover: cover, hero: hero, seq: seq)
+                    latestBlock(all: all, items: items, hero: hero, seq: seq)
                 }
                 if all.count > items.count, !paywall {
                     Button {
@@ -159,6 +150,37 @@ struct NewsView: View {
                     }
                     .buttonStyle(PressStyle())
                 }
+            }
+        }
+    }
+
+    /// The section's briefing (or its picture story).
+    @ViewBuilder
+    private func coverBlock(_ section: NewsSection, cover: SectionBrief?, hero: Story?, seq: [String]) -> some View {
+        if let topic = section.topic, let brief = cover {
+            SectionCover(topic: topic, brief: brief, lead: store.story(brief.leadStoryId), sequence: seq)
+        } else if let hero {
+            NavigationLink(value: StoryRoute(id: hero.id, sequence: seq)) { HeroCard(story: hero) }
+                .buttonStyle(PressStyle())
+                .storyZoomSource(hero.id)
+        }
+    }
+
+    /// The latest stories, in groups with a picture story between them.
+    @ViewBuilder
+    private func latestBlock(all: [Story], items: [Story], hero: Story?, seq: [String]) -> some View {
+        SectionHead(title: "Latest", detail: "\(all.count) stories")
+        // without Scout Plus, the first group of stories is open and everything from the
+        // first big picture card down is locked
+        ForEach(Array(chunks(items.filter { $0.id != hero?.id }).enumerated()), id: \.element.id) { i, chunk in
+            if let big = chunk.hero {
+                NavigationLink(value: StoryRoute(id: big.id, sequence: seq)) { HeroCard(story: big) }
+                    .buttonStyle(PressStyle())
+                    .storyZoomSource(big.id)
+                    .locked(paywall && i > 0)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            } else {
+                StoryList(stories: chunk.rows, sequence: seq, locked: paywall && i > 0)
             }
         }
     }

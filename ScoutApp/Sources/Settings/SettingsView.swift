@@ -130,7 +130,6 @@ struct SettingsView: View {
     @AppStorage(Plus.sourceKey) private var plusSource = ""
     @AppStorage(Plus.freeStyleKey) private var freeStyle = "scout"
     @AppStorage(Plus.testFreeKey) private var testAsFree = false
-    @AppStorage(WideLayout.key) private var wideLayout = WideLayout.defaultValue
     @AppStorage(PlayAll.key) private var playAll = PlayAll.defaultValue
     @State private var showPlus = false
     @State private var previewNote = false
@@ -328,9 +327,6 @@ struct SettingsView: View {
     /// TestFlight builds only: switches for trying things out. The App Store build never shows this.
     private var testFlightSection: some View {
         Section {
-            Picker("Wide layout", selection: $wideLayout) {
-                ForEach(WideLayout.allCases) { Text($0.title).tag($0.rawValue) }
-            }
             Toggle("Test as a free user", isOn: $testAsFree)
                 .tint(Theme.accent)
                 .onChange(of: testAsFree) { _, _ in Task { await PlusStore.shared.refresh() } }

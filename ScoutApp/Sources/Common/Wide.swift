@@ -1,58 +1,44 @@
 import SwiftUI
 
-// MARK: - The wide layout (an unfolded inner screen)
+// MARK: - The iPhone Duo
 //
-// Outer screen: one page, tabs on the right edge. Inner screen: Today on the right, always there;
-// the left side switches between Briefings, Stocks and History; what's playing sits bottom right. A story or a stock opens across the whole screen in two columns:
-// the picture and the headline on the left, everything else on the right.
-
-enum WideLayout: String, CaseIterable, Identifiable {
-    case automatic, on, off
-    var id: String { rawValue }
-    static let key = "layout.wide"
-    /// TestFlight builds open in the fold layout straight away; the App Store version picks it on wide screens.
-    static var defaultValue: String { (Plus.isTestFlight ? WideLayout.on : .automatic).rawValue }
-    /// Wider than this (in points) is the open, inner screen: two columns.
-    static let openWidth: CGFloat = 600
-    var title: String {
-        switch self {
-        case .automatic: return "Automatic (inner screen)"
-        case .on: return "Fold layout, always"
-        case .off: return "Off"
-        }
-    }
-
-    /// Wide enough for two columns: an unfolded screen, or forced on in TestFlight.
-    static func isWide(width: CGFloat, sizeClass: UserInterfaceSizeClass?, setting: String) -> Bool {
-        switch WideLayout(rawValue: setting) ?? .automatic {
-        case .on: return true
-        case .off: return false
-        case .automatic: return width >= openWidth || sizeClass == .regular
-        }
-    }
-}
+// Only the Duo gets this; an ordinary iPhone keeps the usual tab bar. Folded (the outer screen,
+// nearly as wide as it's tall) Scout is the phone app, a little wider and shorter, with the four
+// tabs standing in the right-hand status column under the clock and battery. Opened and held
+// sideways, each page splits into two columns (Today: the weather and Top stories on the left,
+// More for you on the right; Briefings: the briefing left, the stories right; Stocks: your stocks
+// and the ones in the news left, the top ten right). Opened and upright: one roomy column.
 
 private struct ScoutWideKey: EnvironmentKey { static let defaultValue = false }
+private struct StatusBandKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
 
 extension EnvironmentValues {
-    /// True in the wide layout: pages share one navigation stack, stories open in two columns.
+    /// True on the opened Duo held sideways: pages split into two columns, stories open in two.
     var scoutWide: Bool {
         get { self[ScoutWideKey.self] }
         set { self[ScoutWideKey.self] = newValue }
     }
+    /// The status bar's height when it runs across the top (the opened Duo, upright); 0 elsewhere.
+    var statusBand: CGFloat {
+        get { self[StatusBandKey.self] }
+        set { self[StatusBandKey.self] = newValue }
+    }
 }
 
-/// A page's navigation: its own stack on a phone; in the wide layout the whole screen's one stack,
-/// so a story opened from either side fills the screen.
+enum DuoScreen {
+    /// The Duo's shape: far less tall than an ordinary iPhone (outer screen, or opened upright).
+    static func isDuo(_ size: CGSize) -> Bool { size.height / max(size.width, 1) < 1.6 || size.width >= 760 }
+    /// Wide enough for two phone-width columns: the opened Duo held sideways.
+    static func columns(_ size: CGSize) -> Bool { size.width >= 760 }
+}
+
+/// A page's navigation stack (each tab keeps its own, as on the phone).
 struct ScoutNavigation<Content: View>: View {
     var path: Binding<NavigationPath>? = nil
     @ViewBuilder var content: () -> Content
-    @Environment(\.scoutWide) private var wide
 
     var body: some View {
-        if wide {
-            content()
-        } else if let path {
+        if let path {
             NavigationStack(path: path, root: content)
         } else {
             NavigationStack(root: content)
@@ -60,83 +46,113 @@ struct ScoutNavigation<Content: View>: View {
     }
 }
 
-/// The fold layout. Outer screen: one page at a time. Inner screen: Today on the left (it slides
-/// over when the phone opens) and the chosen page on the right. On both, the tabs stand on the
-/// right edge, always there (stories open beside them), with what's playing as a pill above them.
-struct WideRoot: View {
+/// The Duo, closed or open: one page at a time, the four tabs stacked at the bottom of the
+/// right-hand column, under the clock, camera and battery, with what's playing just above them.
+/// Where iOS keeps that column for itself (the status column) the tabs sit inside it.
+struct DuoRoot: View {
     @Binding var tab: Int
     @Binding var showSettings: Bool
-    @State private var path = NavigationPath()
-    /// Opens with Today full width, then Today moves to the left and the other page comes in.
-    @State private var settled = false
+    let statusColumn: CGFloat
 
     var body: some View {
-        GeometryReader { g in
-            let two = g.size.width >= WideLayout.openWidth
-            let rail: CGFloat = two ? 76 : 64
-            let todayWidth = min(max((g.size.width - rail) * 0.42, 360), 520)
-            HStack(spacing: 0) {
-                NavigationStack(path: $path) {
-                    HStack(spacing: 0) {
-                        if two {
-                            TodayView(showSettings: $showSettings)
-                                .environment(\.scoutTab, 0)
-                                .frame(width: settled ? todayWidth : g.size.width - rail)
-                                .clipped()
-                            Rectangle().fill(Theme.hairline).frame(width: 0.5).ignoresSafeArea()
-                            ZStack {
-                                page(1) { NewsView(showSettings: $showSettings) }
-                                page(2) { StocksView(showSettings: $showSettings) }
-                                page(3) { HistoryView(showSettings: $showSettings) }
-                            }
-                            .frame(maxWidth: .infinity)
-                            .opacity(settled ? 1 : 0)
-                            .offset(x: settled ? 0 : 60)
-                        } else {
-                            ZStack {
-                                page(0) { TodayView(showSettings: $showSettings) }
-                                page(1) { NewsView(showSettings: $showSettings) }
-                                page(2) { StocksView(showSettings: $showSettings) }
-                                page(3) { HistoryView(showSettings: $showSettings) }
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .background(Theme.background.ignoresSafeArea())
-                    .toolbar(.hidden, for: .navigationBar)
-                    .storyDestinations()
-                }
-                .tint(Theme.ink)
-                TabRail(tab: $tab, showSettings: $showSettings, todayPinned: two, onTab: { path = NavigationPath() })
-                    .frame(width: rail)
+        let inColumn = statusColumn > 40
+        let column = inColumn ? statusColumn : 74
+        HStack(spacing: 0) {
+            ZStack {
+                // every page stays alive (and keeps its place) while another one shows
+                page(0) { TodayView(showSettings: $showSettings) }
+                page(1) { NewsView(showSettings: $showSettings) }
+                page(2) { StocksView(showSettings: $showSettings) }
+                page(3) { HistoryView(showSettings: $showSettings) }
             }
-            .background(Theme.background.ignoresSafeArea())
-            .onAppear { if two && tab == 0 { tab = 1 } }
-            .onChange(of: two) { _, open in
-                // opening the phone: Today moves to the left; closing it: back to one page
-                if open && tab == 0 { tab = 1 }
-                settled = false
-                withAnimation(.spring(response: 0.65, dampingFraction: 0.86).delay(0.2)) { settled = true }
-            }
+            .frame(maxWidth: .infinity)
+            if !inColumn { Color.clear.frame(width: column) }
         }
-        .environment(\.scoutWide, true)
-        .onAppear { withAnimation(.spring(response: 0.65, dampingFraction: 0.86).delay(0.35)) { settled = true } }
-        .onReceive(NotificationCenter.default.publisher(for: .scoutShowPage)) { note in
-            path = NavigationPath()
-            // a link to a story opens it across the screen, beside the tabs
-            if let url = note.object as? URL, url.host == "story", let id = url.pathComponents.dropFirst().first {
-                path.append(StoryRoute(id: id, sequence: [id]))
+        .overlay(alignment: .bottomTrailing) {
+            VStack(spacing: 10) {
+                RailPlayer()
+                DuoRail(selection: $tab)
             }
+            .padding(.bottom, 10)
+            .frame(width: column)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .offset(x: inColumn ? column : 0)
         }
+        .background(Theme.background.ignoresSafeArea())
     }
 
-    /// Each page stays alive (its scroll position too) while another one shows.
     private func page<V: View>(_ index: Int, @ViewBuilder _ view: () -> V) -> some View {
         view()
-            .environment(\.scoutTab, index)
+            .storyTab(index)
+            .storyZoomScope()
+            .tint(Theme.ink)
             .opacity(tab == index ? 1 : 0)
             .allowsHitTesting(tab == index)
             .accessibilityHidden(tab != index)
+    }
+}
+
+/// The tabs standing up, as in Halo: a slim capsule in the bottom of the right-hand column,
+/// within reach of the thumb. Tap the tab you're on to go back to its top.
+struct DuoRail: View {
+    @Binding var selection: Int
+
+    private let items: [(Int, String, String, String)] = [
+        (0, "Today", "newspaper", "newspaper.fill"),
+        (1, "Briefings", "list.bullet.rectangle.portrait", "list.bullet.rectangle.portrait.fill"),
+        (2, "Stocks", "chart.line.uptrend.xyaxis", "chart.line.uptrend.xyaxis"),
+        (3, "History", "clock.arrow.circlepath", "clock.arrow.circlepath"),
+    ]
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ForEach(items, id: \.0) { index, title, symbol, selected in
+                let on = selection == index
+                Button {
+                    if on { NotificationCenter.default.post(name: .scoutScrollTop, object: index) }
+                    selection = index
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: on ? selected : symbol)
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                            .background(on ? Theme.accent : .clear, in: Circle())
+                            .foregroundStyle(on ? .white : Theme.text)
+                        Text(title)
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                            .foregroundStyle(on ? Theme.text : Theme.secondary)
+                    }
+                    .frame(width: 60, height: 66)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(title)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 8)
+        .background(Theme.card, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 0.5))
+        .padding(.horizontal, 6)
+        .animation(.snappy(duration: 0.25), value: selection)
+        .sensoryFeedback(.selection, trigger: selection)
+    }
+}
+
+/// Portrait on an ordinary iPhone; any way round on the opened Duo, so Scout fills it.
+enum DuoOrientation {
+    static func mask(_ scene: UIWindowScene?) -> UIInterfaceOrientationMask {
+        guard let b = scene?.screen.bounds else { return .portrait }
+        return min(b.width, b.height) >= 560 ? .all : .portrait
+    }
+
+    /// Asks iOS to look again after the screen changes (folded or opened).
+    @MainActor static func refresh() {
+        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+            scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            if mask(scene) == .portrait { scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in } }
+        }
     }
 }
 
@@ -198,75 +214,6 @@ private struct RailBars: View {
     @ObservedObject private var clock = Speaker.shared.clock
     var body: some View {
         PlaybackVisual(style: .bars, playing: !speaker.paused, progress: clock.progress, size: 20, tint: Theme.accent)
-    }
-}
-
-/// The tabs, standing on the right edge and stacked at the bottom, within reach of your thumb:
-/// Today, Briefings, Stocks, History. Settings sits at the top.
-struct TabRail: View {
-    @Binding var tab: Int
-    @Binding var showSettings: Bool
-    /// On the inner screen Today is always showing, so its tab just takes it back to the top.
-    var todayPinned = false
-    /// Called when a tab is chosen (an open story closes).
-    var onTab: () -> Void = {}
-    @ObservedObject private var speaker = Speaker.shared
-
-    private let items: [(Int, String, String)] = [
-        (0, "Today", "newspaper"),
-        (1, "Briefings", "list.bullet.rectangle.portrait"),
-        (2, "Stocks", "chart.line.uptrend.xyaxis"),
-        (3, "History", "clock.arrow.circlepath"),
-    ]
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Button { showSettings = true } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 17, weight: .medium))
-                    .frame(width: 44, height: 44)
-                    .foregroundStyle(Theme.secondary)
-            }
-            .buttonStyle(PressStyle())
-            .accessibilityLabel("Settings")
-            Spacer()
-            RailPlayer()
-                .padding(.bottom, 6)
-            ForEach(items, id: \.0) { index, title, symbol in
-                Button {
-                    onTab()
-                    if index == 0 && todayPinned || index == tab {
-                        NotificationCenter.default.post(name: .scoutScrollTop, object: index)
-                    } else {
-                        withAnimation(.snappy) { tab = index }
-                    }
-                } label: {
-                    let on = index == tab || (index == 0 && todayPinned)
-                    VStack(spacing: 3) {
-                        Image(systemName: symbol)
-                            .font(.system(size: 18, weight: on ? .bold : .medium))
-                            .frame(width: 46, height: 34)
-                            .background(index == tab ? Theme.accent.opacity(0.14) : Color.clear, in: Capsule())
-                        Text(title).font(.system(size: 10, weight: on ? .bold : .semibold))
-                            .lineLimit(1).minimumScaleFactor(0.8)
-                    }
-                    .foregroundStyle(index == tab ? Theme.accent : on ? Theme.text : Theme.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 5)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressStyle())
-                .accessibilityAddTraits(index == tab ? .isSelected : [])
-            }
-        }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 4)
-        .frame(maxHeight: .infinity)
-        .scoutGlass(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .padding(.vertical, 10)
-        .padding(.trailing, 8)
-        .sensoryFeedback(.selection, trigger: tab)
-        .animation(.snappy, value: speaker.now == nil)
     }
 }
 

@@ -80,6 +80,11 @@ struct ScoutApp: App {
 
 /// Shows the morning notification even while Scout is open, and opens Today when it's tapped.
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// Portrait on an ordinary iPhone; any way round on the opened iPhone Duo.
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        DuoOrientation.mask(window?.windowScene)
+    }
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         return true
@@ -103,17 +108,30 @@ struct RootView: View {
     @State private var showSettings = false
     @State private var showPlus = false
     @State private var tab = 0
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    @AppStorage(WideLayout.key) private var wideSetting = WideLayout.defaultValue
+    @State private var duo = false
 
     var body: some View {
+        // The iPhone Duo (recognised by its screen's shape) gets its own layout; any other iPhone
+        // the usual tab bar along the bottom.
         GeometryReader { g in
-            if WideLayout.isWide(width: g.size.width, sizeClass: sizeClass, setting: wideSetting) {
-                WideRoot(tab: $tab, showSettings: $showSettings)
-            } else {
-                tabs
+            let isDuo = DuoScreen.isDuo(g.size)
+            // upright and open, iOS's status bar runs across the top: pages go up into it
+            let band = g.size.height > g.size.width && g.safeAreaInsets.top > 30
+                && g.safeAreaInsets.trailing <= 40 ? g.safeAreaInsets.top : 0
+            Group {
+                if isDuo {
+                    DuoRoot(tab: $tab, showSettings: $showSettings, statusColumn: g.safeAreaInsets.trailing)
+                        .environment(\.scoutWide, DuoScreen.columns(g.size))
+                        .environment(\.statusBand, band)
+                } else {
+                    tabs
+                }
             }
+            .frame(width: g.size.width, height: g.size.height)
+            .onChange(of: isDuo, initial: true) { _, d in duo = d }
         }
+        // folded or opened: only the big screen turns sideways
+        .onChange(of: duo) { _, _ in DuoOrientation.refresh() }
         // Colors are read when views draw, so a new look rebuilds the pages (the sheet stays open).
         .id(look.appearance)
         .sensoryFeedback(.selection, trigger: tab)
@@ -131,6 +149,7 @@ struct RootView: View {
         .onOpenURL { open($0) }
         // the simulator screenshots start the app on a page (-scoutStartURL scout://stocks)
         .task {
+            if UserDefaults.standard.object(forKey: "scoutTab") != nil { tab = min(3, max(0, UserDefaults.standard.integer(forKey: "scoutTab"))) }
             if let s = UserDefaults.standard.string(forKey: "scoutStartURL"), let url = URL(string: s) {
                 try? await Task.sleep(for: .seconds(2))
                 open(url)

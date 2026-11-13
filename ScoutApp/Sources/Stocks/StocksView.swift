@@ -13,6 +13,8 @@ struct StocksView: View {
 
     @AppStorage(Plus.key) private var hasPlus = false
     private var paywall: Bool { !hasPlus }
+    /// The opened iPhone Duo held sideways: two columns.
+    @Environment(\.scoutWide) private var wide
 
     /// A heading and what's under it, close together.
     private func section<C: View>(@ViewBuilder _ content: () -> C) -> some View {
@@ -24,43 +26,17 @@ struct StocksView: View {
             ScoutPage(showSettings: $showSettings, title: "Stocks", subtitle: stocks.updatedText,
                       editing: stocks.mine.isEmpty ? nil : $editing,
                       onRefresh: { await refreshAll() }, isRefreshing: stocks.isLoading) {
-                section {
-                    SectionHead(title: "Markets", top: 2)
-                    MarketsStrip()
-                }
-                section {
-                    SectionHead(title: "Your stocks", detail: stocks.mine.isEmpty ? nil : "\(stocks.mine.count)", top: 2)
-                    if stocks.mine.isEmpty {
-                        addPrompt
-                    } else {
-                        StockList(symbols: stocks.mine, editing: editing)
-                        if !editing { addButton }
+                markets
+                if wide {
+                    // your stocks and the ones in the news on the left, the top ten on the right
+                    HStack(alignment: .top, spacing: 18) {
+                        VStack(spacing: 16) { yours; inNews }.frame(maxWidth: .infinity, alignment: .top)
+                        VStack(spacing: 16) { topTen }.frame(maxWidth: .infinity, alignment: .top)
                     }
-                }
-                if !stocks.inTheNews.isEmpty {
-                    let list = stocks.inTheNews
-                    section {
-                        SectionHead(title: "In the news", subtitle: "Named in Scout's stories", top: 2)
-                        StockList(symbols: allNews ? list : Array(list.prefix(15)), editing: false)
-                        if list.count > 15 {
-                            Button {
-                                withAnimation(.snappy) { allNews.toggle() }
-                            } label: {
-                                Text(allNews ? "Show fewer" : "Show all \(list.count)")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .frame(maxWidth: .infinity).frame(height: 40)
-                                    .background(Theme.card, in: Capsule())
-                                    .foregroundStyle(Theme.text)
-                            }
-                            .buttonStyle(PressStyle())
-                        }
-                    }
-                }
-                if !stocks.top.isEmpty {
-                    section {
-                        SectionHead(title: "Top ten companies", subtitle: "US, by market value", top: 2)
-                        StockList(symbols: Array(stocks.top.prefix(10)), editing: false)
-                    }
+                } else {
+                    yours
+                    inNews
+                    topTen
                 }
                 Text("Prices update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Tap a change to switch between %, the price change and market value. AI summaries are written each morning. Not financial advice.")
                     .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
@@ -77,6 +53,61 @@ struct StocksView: View {
     }
 
     private func refreshAll() async { await stocks.refreshFile() }
+
+    /// Markets, across the top.
+    @ViewBuilder private var markets: some View {
+        section {
+            SectionHead(title: "Markets", top: 2)
+            MarketsStrip()
+        }
+    }
+
+    /// The stocks you follow.
+    @ViewBuilder private var yours: some View {
+        section {
+            SectionHead(title: "Your stocks", detail: stocks.mine.isEmpty ? nil : "\(stocks.mine.count)", top: 2)
+            if stocks.mine.isEmpty {
+                addPrompt
+            } else {
+                StockList(symbols: stocks.mine, editing: editing)
+                if !editing { addButton }
+            }
+        }
+    }
+
+    /// Stocks named in Scout's stories.
+    @ViewBuilder private var inNews: some View {
+        if !stocks.inTheNews.isEmpty {
+            let list = stocks.inTheNews
+            section {
+                SectionHead(title: "In the news", subtitle: "Named in Scout's stories", top: 2)
+                StockList(symbols: allNews ? list : Array(list.prefix(15)), editing: false)
+                if list.count > 15 {
+                    Button {
+                        withAnimation(.snappy) { allNews.toggle() }
+                    } label: {
+                        Text(allNews ? "Show fewer" : "Show all \(list.count)")
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(maxWidth: .infinity).frame(height: 40)
+                            .background(Theme.card, in: Capsule())
+                            .foregroundStyle(Theme.text)
+                    }
+                    .buttonStyle(PressStyle())
+                }
+            }
+        }
+    }
+
+    /// The ten biggest US companies.
+    @ViewBuilder private var topTen: some View {
+        if !stocks.top.isEmpty {
+            section {
+                SectionHead(title: "Top ten companies", subtitle: "US, by market value", top: 2)
+                StockList(symbols: Array(stocks.top.prefix(10)), editing: false)
+            }
+        }
+    }
+
 
     private var addPrompt: some View {
         Button { if paywall { showPlus = true } else { showSearch = true } } label: {

@@ -17,6 +17,10 @@ struct TodayView: View {
     @State private var dragOffset: CGFloat = 0
     @State private var dragShift: CGFloat = 0     // drag already used up by swapping past cards
     @State private var heights: [TodayCard: CGFloat] = [:]
+    /// The opened iPhone Duo held sideways: two columns.
+    @Environment(\.scoutWide) private var wide
+    /// The cards on the left in two columns: the weather and the metro, then Top stories.
+    private static let leftCards: Set<TodayCard> = [.weather, .tube, .top]
     private let spacing: CGFloat = 14              // ScoutPage's gap between cards
 
     var body: some View {
@@ -29,7 +33,21 @@ struct TodayView: View {
                           async let trains: Void = tube.refresh(force: true)
                           _ = await (news, sky, trains)
                       }, isRefreshing: store.isLoading) {
-                if let page {
+                if let page, wide, !editing {
+                    // the weather and Top stories on the left, More for you and the rest on the right
+                    let cards = visible(page)
+                    HStack(alignment: .top, spacing: 18) {
+                        VStack(spacing: 14) {
+                            ForEach(cards.filter { Self.leftCards.contains($0) }) { cardView($0, page: page) }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        VStack(spacing: 14) {
+                            ForEach(rightOrder(cards)) { cardView($0, page: page) }
+                            footer(page)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .top)
+                    }
+                } else if let page {
                     ForEach(visible(page)) { card in
                         editableCard(card, page: page)
                     }
@@ -82,6 +100,12 @@ struct TodayView: View {
         // the weather and the metro share one card, where the first of the two sits
         guard let first = list.first(where: { $0 == .weather || $0 == .tube }) else { return list }
         return list.filter { ($0 != .weather && $0 != .tube) || $0 == first }
+    }
+
+    /// The right-hand column: More for you first, then the rest in your order.
+    private func rightOrder(_ cards: [TodayCard]) -> [TodayCard] {
+        let right = cards.filter { !Self.leftCards.contains($0) }
+        return right.filter { $0 == .more } + right.filter { $0 != .more }
     }
 
     /// The weather and the metro share one card: hiding it hides both.

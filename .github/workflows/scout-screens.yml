@@ -49,126 +49,65 @@ jobs:
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
 
-      - name: Photograph Scout on the iPhone Duo, closed and opened
+      - name: Photograph every tab on each of the Duo's screens (and an ordinary iPhone)
         run: |
+          set +e
           APP=$(ls -d ScoutApp/build/Build/Products/Debug-iphonesimulator/Scout.app)
-          mkdir -p screens/duo
-          rm -f screens/duo/*.png
+          rm -rf screens/duo; mkdir -p screens/duo
           STORY=$(curl -s https://raw.githubusercontent.com/ralphgeb/ScoutAI/main/data/news.json | python3 -c "
           import json,sys
           s=json.load(sys.stdin)['stories']
           s=sorted([x for x in s if x.get('image')], key=lambda x:(-(x.get('importance') or 0), -len(x.get('sources',[]))))
-          print(s[0]['id'] if s else '')" || true)
+          print(s[0]['id'] if s else '')")
           echo "Story: $STORY"
-          TYPE=$(xcrun simctl list devicetypes -j | python3 -c "
-          import json,sys
-          t=[d for d in json.load(sys.stdin)['devicetypes'] if 'duo' in d['name'].lower()]
-          print(t[0]['identifier'] if t else '')")
-          [ -n "$TYPE" ] || { echo "::error::This runner's Xcode has no iPhone Duo simulator"; exit 1; }
-          # the Duo needs a runtime made for it (iOS 27.1 or later, its own build): try each, newest first
-          UDID=""
-          for RT in $(xcrun simctl list runtimes -j | python3 -c "
+          # iOS runtimes, newest first (the Duo has its own, e.g. iOS-27-2-iPhone19-4)
+          xcrun simctl list runtimes -j | python3 -c "
           import json,sys
           r=[x for x in json.load(sys.stdin)['runtimes'] if x['platform']=='iOS' and x['isAvailable']]
-          for x in sorted(r,key=lambda x:[int(p) for p in x['version'].split('.')], reverse=True): print(x['identifier'])"); do
-            if UDID=$(xcrun simctl create "Scout Duo" "$TYPE" "$RT" 2>err.txt); then echo "Created the Duo on $RT"; break; fi
-            echo "Not on $RT: $(tr '\n' ' ' < err.txt)"; UDID=""
-          done
-          [ -n "$UDID" ] || { echo "::error::The iPhone Duo simulator couldn't be created"; exit 1; }
-          # the Simulator app (it holds the Device menu that folds and unfolds the Duo)
-          SIMAPP="$(xcode-select -p)/Applications/Simulator.app"
-          echo "Simulator app: $SIMAPP"
-          open "$SIMAPP" --args -CurrentDeviceUDID "$UDID" || echo "::warning::Couldn't open the Simulator app"
-          xcrun simctl boot "$UDID" 2>/dev/null || true
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryLevel 100 --batteryState charged --cellularBars 4 --wifiBars 3 || true
-          xcrun simctl install "$UDID" "$APP"
-          xcrun simctl privacy "$UDID" grant location com.ralphgeb.scout || true
-          xcrun simctl location "$UDID" set 51.5072,-0.1276 || true
-          # the outer screen is "LCD" (screen 1), the inner one "LCD-1"
-          xcrun simctl io "$UDID" enumerate > displays.txt 2>&1 || true
-          OUTER=1
-          INNER=$(python3 -c "
+          r.sort(key=lambda x:([int(p) for p in x['version'].split('.')], 'iPhone' in x['identifier']), reverse=True)
+          print('\n'.join(x['identifier'] for x in r))" > runtimes.txt
+          for PAIR in "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo|duo" "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro|iphone"; do
+            TYPE=${PAIR%%|*}; SLUG=${PAIR##*|}
+            UDID=""
+            while read -r RT; do
+              UDID=$(xcrun simctl create "$SLUG" "$TYPE" "$RT" 2>/dev/null) && { echo "$SLUG on $RT"; break; }
+            done < runtimes.txt
+            [ -z "$UDID" ] && { echo "::warning::No runtime for $TYPE"; continue; }
+            xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl status_bar "$UDID" override --time "9:41" --batteryLevel 100 --batteryState charged --cellularBars 4 --wifiBars 3
+            xcrun simctl install "$UDID" "$APP"
+            xcrun simctl privacy "$UDID" grant location com.ralphgeb.scout
+            xcrun simctl location "$UDID" set 51.5072,-0.1276
+            xcrun simctl io "$UDID" enumerate > screens.txt
+            # the phone's own screens (LCD, LCD-1…), not TV-out or CarPlay
+            DISPLAYS=$(python3 -c "
           import re
-          t=open('displays.txt').read()
-          m=re.findall(r'Screen ID: (\d+)\s+Name: (LCD-1)', t)
-          print(m[0][0] if m else 3)")
-          echo "Outer screen $OUTER, inner screen $INNER"
-          shot() {   # $1 name, $2 display, $3 page to start on (optional)
-            xcrun simctl terminate "$UDID" com.ralphgeb.scout 2>/dev/null || true
-            if [ -n "$3" ]; then
-              xcrun simctl launch "$UDID" com.ralphgeb.scout -onboarded YES -layout.wide on -scoutStartURL "$3"
-            else
-              xcrun simctl launch "$UDID" com.ralphgeb.scout -onboarded YES -layout.wide on
-            fi
-            sleep 16   # news, pictures and weather load
-            xcrun simctl io "$UDID" screenshot --display="$2" "screens/duo/$1.png" || true
-          }
-          shot closed-1-today "$OUTER"
-          shot closed-2-briefings "$OUTER" "scout://news?section=Tech"
-          shot closed-3-stocks "$OUTER" "scout://stocks"
-          [ -n "$STORY" ] && shot closed-4-story "$OUTER" "scout://story/$STORY"
-          shot closed-5-history "$OUTER" "scout://history"
-
-          # unfold the Duo from the Simulator app's Device menu
-          echo "== The Simulator app's Device menu:"
-          osascript <<'OSA' || echo "::warning::Couldn't read the Simulator menus (accessibility)"
-          tell application "Simulator" to activate
-          delay 3
-          tell application "System Events" to tell process "Simulator"
-            set out to ""
-            repeat with mi in menu items of menu 1 of menu bar item "Device" of menu bar 1
-              set n to name of mi
-              if n is not missing value then set out to out & n & linefeed
-              try
-                repeat with sub in menu items of menu 1 of mi
-                  if name of sub is not missing value then set out to out & "    > " & name of sub & linefeed
-                end repeat
-              end try
-            end repeat
-            return out
-          end tell
-          OSA
-          OPENED=""
-          for WORDS in "Unfold" "Open" "Flat" "Fold"; do
-            R=$(osascript - "$WORDS" <<'OSA' 2>&1 || true
-          on run argv
-            set w to item 1 of argv
-            tell application "Simulator" to activate
-            delay 1
-            tell application "System Events" to tell process "Simulator"
-              repeat with mi in menu items of menu 1 of menu bar item "Device" of menu bar 1
-                set n to name of mi
-                if n is not missing value and n contains w then
-                  click mi
-                  return "clicked " & n
-                end if
-                try
-                  repeat with sub in menu items of menu 1 of mi
-                    set sn to name of sub
-                    if sn is not missing value and sn contains w then
-                      click sub
-                      return "clicked " & n & " > " & sn
-                    end if
-                  end repeat
-                end try
-              end repeat
-            end tell
-            return "none"
-          end run
-          OSA
-            )
-            echo "Looking for \"$WORDS\": $R"
-            case "$R" in clicked*) OPENED="$R"; break;; esac
+          t=open('screens.txt').read()
+          for sid,name in re.findall(r'Screen ID: (\d+)\s+Name: (LCD[^\n]*)', t): print(sid)")
+            echo "$SLUG screens: $DISPLAYS"
+            # one screen on at a time: folded = the outer screen, opened = the inner one
+            shoot() {   # $1 name, then launch arguments
+              NAME=$1; shift
+              N=0
+              for D in $DISPLAYS; do
+                N=$((N+1))
+                for O in $DISPLAYS; do
+                  if [ "$O" = "$D" ]; then xcrun simctl io "$UDID" screenConfig --display="$O" power on
+                  else xcrun simctl io "$UDID" screenConfig --display="$O" power off; fi
+                done
+                xcrun simctl terminate "$UDID" com.ralphgeb.scout 2>/dev/null
+                xcrun simctl launch "$UDID" com.ralphgeb.scout -onboarded YES "$@"
+                sleep 14
+                LABEL=$( [ "$SLUG" = duo ] && { [ $N -eq 1 ] && echo closed || echo open; } || echo screen )
+                xcrun simctl io "$UDID" screenshot --display="$D" "screens/duo/$SLUG-$LABEL-$NAME.png"
+              done
+            }
+            shoot 1-today -scoutTab 0
+            shoot 2-briefings -scoutTab 1
+            shoot 3-stocks -scoutTab 2
+            [ -n "$STORY" ] && shoot 4-story -scoutStartURL "scout://story/$STORY"
+            xcrun simctl shutdown "$UDID"
           done
-          sleep 8
-          if [ -n "$OPENED" ]; then echo "Unfolded: $OPENED"; else echo "::warning::No menu item unfolded the Duo"; fi
-          shot open-1-today-briefings "$INNER" "scout://news?section=Tech"
-          shot open-2-stocks "$INNER" "scout://stocks"
-          [ -n "$STORY" ] && shot open-3-story "$INNER" "scout://story/$STORY"
-          shot open-4-history "$INNER" "scout://history"
-          # whatever the outer screen shows meanwhile
-          xcrun simctl io "$UDID" screenshot --display="$OUTER" "screens/duo/open-5-outer-screen.png" || true
           ls -la screens/duo
 
       - uses: actions/upload-artifact@v4

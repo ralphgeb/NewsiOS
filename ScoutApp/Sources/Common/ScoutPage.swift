@@ -25,6 +25,12 @@ struct ScoutPage<Pinned: View, Content: View>: View {
     /// header (which hides and shows) redraws as you scroll, never the stories.
     @State private var scroll = PageScroll()
     @Environment(\.scoutTab) private var tab
+    /// The scroll view's width: the page is laid out to exactly this, so turning the opened Duo
+    /// lays it out again straight away (a relative frame kept the old width after a rotation).
+    @State private var pageWidth: CGFloat = 0
+    /// The opened Duo upright: iOS's status bar runs across the top and the page goes up into it.
+    @Environment(\.statusBand) private var statusBand
+    private var topPad: CGFloat { statusBand > 0 ? 10 : 0 }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -32,16 +38,17 @@ struct ScoutPage<Pinned: View, Content: View>: View {
                 ScrollView {
                     VStack(spacing: 16) { content() }
                         .padding(.horizontal, Design.sideMargin)
-                        .padding(.top, PageHeader.height + pinnedHeight + 10)
+                        .padding(.top, PageHeader.height + pinnedHeight + 10 + topPad)
                         .padding(.bottom, 36)
                         // never wider than the screen, so the page only ever moves up and down
-                        .containerRelativeFrame(.horizontal)
+                        .frame(width: pageWidth > 0 ? pageWidth : nil)
                         .background(GeometryReader { g in
                             Color.clear.preference(key: ScrollOffsetKey.self, value: -g.frame(in: .named("page")).minY)
                         })
                         .background(alignment: .top) { Color.clear.frame(height: 1).id(RememberScroll.top) }
                 }
                 .coordinateSpace(name: "page")
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pageWidth = $0 }
                 .modifier(TrackScrollOffset(scroll: scroll, pinned: PageHeader.height + pinnedHeight, editing: editing?.wrappedValue == true))
                 .modifier(RememberScroll(key: pageKey, scroll: scroll))
                 .modifier(ScrollRelease(scroll: scroll) { pulled in
@@ -61,6 +68,8 @@ struct ScoutPage<Pinned: View, Content: View>: View {
                 PageHeader(title: title, subtitle: subtitle, showSettings: $showSettings,
                            editing: editing, isRefreshing: isRefreshing,
                            pull: onRefresh == nil ? 0 : scroll.pull)
+                    .padding(.top, topPad)
+                    .padding(.trailing, statusBand > 0 ? 48 : 0)
                 pinned()
             }
 
@@ -71,6 +80,7 @@ struct ScoutPage<Pinned: View, Content: View>: View {
         }
         .onChange(of: pageKey) { _, _ in scroll.show() }
         .background(Theme.background.ignoresSafeArea())
+        .ignoresSafeArea(.container, edges: statusBand > 0 ? .top : [])
         .toolbar(.hidden, for: .navigationBar)
     }
 }
@@ -236,14 +246,7 @@ struct PageHeader: View {
 /// The gear in a round bubble, top right of every page.
 struct SettingsButton: View {
     @Binding var showSettings: Bool
-    /// In the fold layout Settings lives on the tab rail, so the page's own gear goes.
-    @Environment(\.scoutWide) private var wide
-
     var body: some View {
-        if !wide { gear }
-    }
-
-    private var gear: some View {
         Button { showSettings = true } label: {
             Image(systemName: "gearshape")
                 .font(.system(size: 16))
