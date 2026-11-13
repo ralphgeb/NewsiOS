@@ -108,30 +108,18 @@ struct RootView: View {
     @State private var showSettings = false
     @State private var showPlus = false
     @State private var tab = 0
-    @State private var duo = false
+    /// The iPhone Duo (its screens are far squarer than any other iPhone's); fixed for the device.
+    private let foldable = DuoScreen.isFoldable
 
     var body: some View {
-        // The iPhone Duo (recognised by its screen's shape) gets its own layout; any other iPhone
-        // the usual tab bar along the bottom.
-        GeometryReader { g in
-            let isDuo = DuoScreen.isDuo(g.size)
-            // upright and open, iOS's status bar runs across the top: pages go up into it
-            let band = g.size.height > g.size.width && g.safeAreaInsets.top > 30
-                && g.safeAreaInsets.trailing <= 40 ? g.safeAreaInsets.top : 0
-            Group {
-                if isDuo {
-                    DuoRoot(tab: $tab, showSettings: $showSettings, statusColumn: g.safeAreaInsets.trailing)
-                        .environment(\.scoutWide, DuoScreen.columns(g.size))
-                        .environment(\.statusBand, band)
-                } else {
-                    tabs
-                }
+        // The iPhone Duo gets its own layout; any other iPhone the usual tab bar, as it always had.
+        Group {
+            if foldable {
+                duoLayout
+            } else {
+                tabs
             }
-            .frame(width: g.size.width, height: g.size.height)
-            .onChange(of: isDuo, initial: true) { _, d in duo = d }
         }
-        // folded or opened: only the big screen turns sideways
-        .onChange(of: duo) { _, _ in DuoOrientation.refresh() }
         // Colors are read when views draw, so a new look rebuilds the pages (the sheet stays open).
         .id(look.appearance)
         .sensoryFeedback(.selection, trigger: tab)
@@ -171,6 +159,25 @@ struct RootView: View {
             case "history", "saved": tab = 3
             default: tab = 0
             }
+    }
+
+    /// The iPhone Duo only: the tabs stand in the right-hand column. Opened up, the screen can turn
+    /// either way.
+    private var duoLayout: some View {
+        GeometryReader { g in
+            let inner = DuoScreen.inner(g.size)
+            // upright and open, iOS's status bar runs across the top: pages go up into it
+            let band = inner && g.size.height > g.size.width && g.safeAreaInsets.top > 30
+                && g.safeAreaInsets.trailing <= 40 ? g.safeAreaInsets.top : 0
+            DuoRoot(tab: $tab, showSettings: $showSettings, statusColumn: g.safeAreaInsets.trailing, inner: inner)
+                .environment(\.scoutDuo, true)
+                .environment(\.duoInner, inner)
+                .environment(\.scoutWide, DuoScreen.columns(g.size))
+                .environment(\.statusBand, band)
+                .frame(width: g.size.width, height: g.size.height)
+                // folded or opened: only the big screen turns sideways
+                .onChange(of: inner, initial: true) { _, _ in DuoOrientation.refresh() }
+        }
     }
 
     /// The phone layout: the four tabs along the bottom.

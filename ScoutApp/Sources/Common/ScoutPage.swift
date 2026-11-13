@@ -25,12 +25,16 @@ struct ScoutPage<Pinned: View, Content: View>: View {
     /// header (which hides and shows) redraws as you scroll, never the stories.
     @State private var scroll = PageScroll()
     @Environment(\.scoutTab) private var tab
-    /// The scroll view's width: the page is laid out to exactly this, so turning the opened Duo
-    /// lays it out again straight away (a relative frame kept the old width after a rotation).
+    // The iPhone Duo only (an ordinary iPhone lays the page out exactly as before):
+    /// The space the page has (the scroll view less its side insets): the page is laid out to
+    /// exactly this, so turning the opened Duo lays it out again straight away.
     @State private var pageWidth: CGFloat = 0
+    @Environment(\.scoutDuo) private var duo
     /// The opened Duo upright: iOS's status bar runs across the top and the page goes up into it.
     @Environment(\.statusBand) private var statusBand
-    private var topPad: CGFloat { statusBand > 0 ? 10 : 0 }
+    /// The opened Duo sideways: twice the room above the header, so the page isn't squeezed up top.
+    @Environment(\.scoutWide) private var wide
+    private var topPad: CGFloat { statusBand > 0 ? 10 : (wide ? 18 : 0) }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -41,14 +45,16 @@ struct ScoutPage<Pinned: View, Content: View>: View {
                         .padding(.top, PageHeader.height + pinnedHeight + 10 + topPad)
                         .padding(.bottom, 36)
                         // never wider than the screen, so the page only ever moves up and down
-                        .frame(width: pageWidth > 0 ? pageWidth : nil)
+                        .modifier(PageWidth(duo: duo, width: pageWidth))
                         .background(GeometryReader { g in
                             Color.clear.preference(key: ScrollOffsetKey.self, value: -g.frame(in: .named("page")).minY)
                         })
                         .background(alignment: .top) { Color.clear.frame(height: 1).id(RememberScroll.top) }
                 }
                 .coordinateSpace(name: "page")
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pageWidth = $0 }
+                .onGeometryChange(for: CGFloat.self) {
+                    $0.size.width - $0.safeAreaInsets.leading - $0.safeAreaInsets.trailing
+                } action: { if duo { pageWidth = $0 } }
                 .modifier(TrackScrollOffset(scroll: scroll, pinned: PageHeader.height + pinnedHeight, editing: editing?.wrappedValue == true))
                 .modifier(RememberScroll(key: pageKey, scroll: scroll))
                 .modifier(ScrollRelease(scroll: scroll) { pulled in
@@ -82,6 +88,20 @@ struct ScoutPage<Pinned: View, Content: View>: View {
         .background(Theme.background.ignoresSafeArea())
         .ignoresSafeArea(.container, edges: statusBand > 0 ? .top : [])
         .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+/// The page's width: the screen's on an ordinary iPhone (as it always was); on the iPhone Duo the
+/// measured width, which follows a turn of the opened screen without a lag.
+private struct PageWidth: ViewModifier {
+    let duo: Bool
+    let width: CGFloat
+    func body(content: Content) -> some View {
+        if duo {
+            content.frame(width: width > 0 ? width : nil)
+        } else {
+            content.containerRelativeFrame(.horizontal)
+        }
     }
 }
 

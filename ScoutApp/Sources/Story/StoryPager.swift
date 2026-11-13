@@ -19,6 +19,8 @@ struct StoryPager: View {
     let route: StoryRoute
     @State private var current: String?
     @State private var reading: WebLink?
+    /// The opened iPhone Duo: each story shows the rest underneath.
+    @Environment(\.duoInner) private var duoInner
 
     init(route: StoryRoute) {
         self.route = route
@@ -46,7 +48,9 @@ struct StoryPager: View {
                     StoryDetailView(id: id, position: i, count: list.count,
                                     next: i + 1 < list.count ? store.story(list[i + 1]) : nil,
                                     onNext: { withAnimation(.snappy) { current = list[i + 1] } },
-                                    onOpen: { reading = WebLink(url: $0) })
+                                    onOpen: { reading = WebLink(url: $0) },
+                                    others: duoInner ? Array((list[(i + 1)...] + list[..<i]).prefix(12)) : [],
+                                    onPick: { picked in withAnimation(.snappy) { current = picked } })
                         .containerRelativeFrame(.horizontal)
                         .id(id)
                 }
@@ -145,6 +149,9 @@ struct StoryDetailView: View {
     let next: Story?
     let onNext: () -> Void
     let onOpen: (URL) -> Void
+    /// The opened iPhone Duo upright: the rest of the stories, in a grid under this one.
+    var others: [String] = []
+    var onPick: (String) -> Void = { _ in }
     @Environment(\.scoutWide) private var wide
 
     var body: some View {
@@ -166,7 +173,11 @@ struct StoryDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     summaryCard(s)
                     coverage(s)
-                    if let next { upNext(next) }
+                    if !others.isEmpty {
+                        moreGrid
+                    } else if let next {
+                        upNext(next)
+                    }
                     Text("Summary, odds and market effects are written by AI and can be wrong. Not financial advice.")
                         .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                         .multilineTextAlignment(.center).frame(maxWidth: .infinity)
@@ -206,7 +217,11 @@ struct StoryDetailView: View {
                             .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                             .frame(maxWidth: .infinity)
                     }
-                    if let next { upNext(next) }
+                    if !others.isEmpty {
+                        moreGrid
+                    } else if let next {
+                        upNext(next)
+                    }
                     Text("Summary, odds and market effects are written by AI and can be wrong. Not financial advice.")
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.tertiary)
@@ -315,6 +330,38 @@ struct StoryDetailView: View {
                 }
             }
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+    }
+
+    /// The opened iPhone Duo upright: the rest of the stories in two columns under this one.
+    private var moreGrid: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("More stories").scoutLabel().padding(.top, 10)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 14, alignment: .top),
+                                GridItem(.flexible(), spacing: 14, alignment: .top)], spacing: 14) {
+                ForEach(others.compactMap { store.story($0) }) { n in
+                    Button { onPick(n.id) } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            StoryImage(story: n)
+                                .aspectRatio(16 / 10, contentMode: .fill)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 130)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            Text(n.title)
+                                .font(Theme.headline(16))
+                                .foregroundStyle(Theme.text)
+                                .lineLimit(3)
+                                .multilineTextAlignment(.leading)
+                            Text("\(n.outletName) · \(Format.ago(n.published))")
+                                .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .scoutCard(padding: 12)
+                    }
+                    .buttonStyle(PressStyle())
+                }
+            }
         }
     }
 

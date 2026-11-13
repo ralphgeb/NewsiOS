@@ -2,17 +2,33 @@ import SwiftUI
 
 // MARK: - The iPhone Duo
 //
-// Only the Duo gets this; an ordinary iPhone keeps the usual tab bar. Folded (the outer screen,
-// nearly as wide as it's tall) Scout is the phone app, a little wider and shorter, with the four
-// tabs standing in the right-hand status column under the clock and battery. Opened and held
-// sideways, each page splits into two columns (Today: the weather and Top stories on the left,
-// More for you on the right; Briefings: the briefing left, the stories right; Stocks: your stocks
-// and the ones in the news left, the top ten right). Opened and upright: one roomy column.
+// Everything in this file is for the iPhone Duo only. Any other iPhone never reaches it: RootView
+// shows the ordinary tab bar there, exactly as before.
+//
+// Folded (the outer screen) Scout is the phone app, a little wider and shorter, with the four tabs
+// standing in the right-hand column under the clock and battery, and the floating player above
+// the page while something plays. Opened, what's playing becomes one more button in the tab rail.
+// Opened and held sideways, each page splits into two columns (Today: the weather and Top stories
+// on the left, More for you on the right; Briefings: the briefing left, the stories right; Stocks:
+// your stocks and the ones in the news left, the top ten right). Opened and upright: one roomy
+// column, and a story shows the rest of the stories in a grid underneath.
 
+private struct ScoutDuoKey: EnvironmentKey { static let defaultValue = false }
+private struct DuoInnerKey: EnvironmentKey { static let defaultValue = false }
 private struct ScoutWideKey: EnvironmentKey { static let defaultValue = false }
 private struct StatusBandKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
 
 extension EnvironmentValues {
+    /// True only on the iPhone Duo (either screen); false on every other iPhone.
+    var scoutDuo: Bool {
+        get { self[ScoutDuoKey.self] }
+        set { self[ScoutDuoKey.self] = newValue }
+    }
+    /// The Duo opened up (the big inner screen), either way round.
+    var duoInner: Bool {
+        get { self[DuoInnerKey.self] }
+        set { self[DuoInnerKey.self] = newValue }
+    }
     /// True on the opened Duo held sideways: pages split into two columns, stories open in two.
     var scoutWide: Bool {
         get { self[ScoutWideKey.self] }
@@ -26,8 +42,17 @@ extension EnvironmentValues {
 }
 
 enum DuoScreen {
-    /// The Duo's shape: far less tall than an ordinary iPhone (outer screen, or opened upright).
-    static func isDuo(_ size: CGSize) -> Bool { size.height / max(size.width, 1) < 1.6 || size.width >= 760 }
+    /// The iPhone Duo: both its screens are far squarer than any ordinary iPhone's (an ordinary
+    /// iPhone's screen is at least 1.7 times as tall as it's wide). Read from the screen itself,
+    /// never from the space a page gets, so the keyboard or a sheet can't flip the layout.
+    @MainActor static var isFoldable: Bool {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let b = scene?.screen.bounds ?? UIScreen.main.bounds
+        let long = max(b.width, b.height), short = max(1, min(b.width, b.height))
+        return long / short < 1.6
+    }
+    /// The opened Duo: the big screen (the outer one is under 560 points across).
+    static func inner(_ size: CGSize) -> Bool { min(size.width, size.height) >= 560 }
     /// Wide enough for two phone-width columns: the opened Duo held sideways.
     static func columns(_ size: CGSize) -> Bool { size.width >= 760 }
 }
@@ -47,45 +72,60 @@ struct ScoutNavigation<Content: View>: View {
 }
 
 /// The Duo, closed or open: one page at a time, the four tabs stacked at the bottom of the
-/// right-hand column, under the clock, camera and battery, with what's playing just above them.
-/// Where iOS keeps that column for itself (the status column) the tabs sit inside it.
+/// right-hand column, under the clock, camera and battery. Where iOS keeps that column for itself
+/// (the status column) the tabs sit inside it.
 struct DuoRoot: View {
     @Binding var tab: Int
     @Binding var showSettings: Bool
     let statusColumn: CGFloat
+    /// The opened Duo: what's playing is a button in the rail. Folded: it floats over the page.
+    let inner: Bool
+    @ObservedObject private var speaker = Speaker.shared
+    @ObservedObject private var bar = TabBarState.shared
 
     var body: some View {
         let inColumn = statusColumn > 40
         let column = inColumn ? statusColumn : 74
         HStack(spacing: 0) {
-            ZStack {
-                // every page stays alive (and keeps its place) while another one shows
-                page(0) { TodayView(showSettings: $showSettings) }
-                page(1) { NewsView(showSettings: $showSettings) }
-                page(2) { StocksView(showSettings: $showSettings) }
-                page(3) { HistoryView(showSettings: $showSettings) }
+            GeometryReader { g in
+                ZStack {
+                    // every page stays alive (and keeps its place) while another one shows; each is
+                    // held to exactly the space there is, so one page can never push the others wider
+                    page(0, g.size) { TodayView(showSettings: $showSettings) }
+                    page(1, g.size) { NewsView(showSettings: $showSettings) }
+                    page(2, g.size) { StocksView(showSettings: $showSettings) }
+                    page(3, g.size) { HistoryView(showSettings: $showSettings) }
+                }
+                .frame(width: g.size.width, height: g.size.height)
             }
-            .frame(maxWidth: .infinity)
             if !inColumn { Color.clear.frame(width: column) }
         }
         .overlay(alignment: .bottomTrailing) {
-            VStack(spacing: 10) {
-                RailPlayer()
-                DuoRail(selection: $tab)
-            }
-            .padding(.bottom, 10)
-            .frame(width: column)
-            .frame(maxHeight: .infinity, alignment: .bottom)
-            .offset(x: inColumn ? column : 0)
+            DuoRail(selection: $tab, player: inner)
+                .padding(.bottom, 10)
+                .frame(width: column)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .offset(x: inColumn ? column : 0)
         }
         .background(Theme.background.ignoresSafeArea())
     }
 
-    private func page<V: View>(_ index: Int, @ViewBuilder _ view: () -> V) -> some View {
+    private func page<V: View>(_ index: Int, _ size: CGSize, @ViewBuilder _ view: () -> V) -> some View {
         view()
             .storyTab(index)
+            // folded: the floating player over the bottom of the page, as on the phone
+            .safeAreaInset(edge: .bottom) {
+                if !inner, speaker.now != nil, !bar.storyOnScreen {
+                    NowPlayingBar()
+                        .padding(.horizontal, Design.sideMargin + 4)
+                        .padding(.bottom, 6)
+                }
+            }
+            .animation(.snappy, value: speaker.now == nil)
             .storyZoomScope()
             .tint(Theme.ink)
+            .frame(width: size.width, height: size.height)
+            .clipped()
             .opacity(tab == index ? 1 : 0)
             .allowsHitTesting(tab == index)
             .accessibilityHidden(tab != index)
@@ -96,6 +136,9 @@ struct DuoRoot: View {
 /// within reach of the thumb. Tap the tab you're on to go back to its top.
 struct DuoRail: View {
     @Binding var selection: Int
+    /// The opened Duo: while something plays, its play / pause button tops the rail.
+    var player = false
+    @ObservedObject private var speaker = Speaker.shared
 
     private let items: [(Int, String, String, String)] = [
         (0, "Today", "newspaper", "newspaper.fill"),
@@ -106,6 +149,10 @@ struct DuoRail: View {
 
     var body: some View {
         VStack(spacing: 2) {
+            if player, speaker.now != nil {
+                RailPlayButton()
+                    .transition(.scale.combined(with: .opacity))
+            }
             ForEach(items, id: \.0) { index, title, symbol, selected in
                 let on = selection == index
                 Button {
@@ -136,6 +183,7 @@ struct DuoRail: View {
         .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 0.5))
         .padding(.horizontal, 6)
         .animation(.snappy(duration: 0.25), value: selection)
+        .animation(.snappy, value: speaker.now == nil)
         .sensoryFeedback(.selection, trigger: selection)
     }
 }
@@ -143,8 +191,13 @@ struct DuoRail: View {
 /// Portrait on an ordinary iPhone; any way round on the opened Duo, so Scout fills it.
 enum DuoOrientation {
     static func mask(_ scene: UIWindowScene?) -> UIInterfaceOrientationMask {
-        guard let b = scene?.screen.bounds else { return .portrait }
+        guard isFoldableScreen(scene), let b = scene?.screen.bounds else { return .portrait }
         return min(b.width, b.height) >= 560 ? .all : .portrait
+    }
+
+    private static func isFoldableScreen(_ scene: UIWindowScene?) -> Bool {
+        guard let b = scene?.screen.bounds else { return false }
+        return max(b.width, b.height) / max(1, min(b.width, b.height)) < 1.6
     }
 
     /// Asks iOS to look again after the screen changes (folded or opened).
@@ -156,48 +209,34 @@ enum DuoOrientation {
     }
 }
 
-/// What's playing, as a pill in the tab rail: the artwork, the bars moving with the sound, and
-/// play/pause. Tap the artwork to go to what's playing.
-struct RailPlayer: View {
+/// What's playing, as one more button at the top of the tab rail (the opened Duo): play / pause,
+/// with the bars moving under it while it plays. Hold it to go to what's playing.
+private struct RailPlayButton: View {
     @ObservedObject private var speaker = Speaker.shared
     @Environment(\.openURL) private var openURL
 
     var body: some View {
         if let now = speaker.now {
-            VStack(spacing: 8) {
-                Button { open(now) } label: {
-                    Group {
-                        if let url = now.artwork {
-                            RemoteImage(url: url) { Theme.accent.opacity(0.15) }
-                        } else {
-                            ZStack {
-                                Theme.accent.opacity(0.15)
-                                Image(systemName: "headphones").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.accent)
-                            }
-                        }
-                    }
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(PressStyle())
-                .accessibilityLabel("Now playing: \(now.title)")
-                RailBars()
-                Button { speaker.toggle() } label: {
+            Button { speaker.toggle() } label: {
+                VStack(spacing: 3) {
                     Image(systemName: speaker.paused ? "play.fill" : "pause.fill")
-                        .font(.system(size: 13, weight: .black))
-                        .frame(width: 34, height: 34)
-                        .background(Theme.accent, in: Circle())
-                        .foregroundStyle(.white)
+                        .font(.system(size: 16, weight: .black))
                         .contentTransition(.symbolEffect(.replace))
+                        .frame(width: 44, height: 44)
+                        .background(Theme.accent.opacity(0.16), in: Circle())
+                        .foregroundStyle(Theme.accent)
+                    RailBars()
+                        .frame(height: 12)
                 }
-                .buttonStyle(PressStyle())
-                .accessibilityLabel(speaker.paused ? "Play" : "Pause")
+                .frame(width: 60, height: 66)
+                .contentShape(Rectangle())
             }
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
-            .background(Theme.accent.opacity(0.1), in: Capsule())
-            .padding(.horizontal, 6)
-            .transition(.scale.combined(with: .opacity))
+            .buttonStyle(.plain)
+            .contextMenu {
+                Button { open(now) } label: { Label("Go to what's playing", systemImage: "arrow.up.right") }
+                Button(role: .destructive) { speaker.stop() } label: { Label("Stop", systemImage: "stop.fill") }
+            }
+            .accessibilityLabel(speaker.paused ? "Play \(now.title)" : "Pause \(now.title)")
             .sensoryFeedback(.selection, trigger: speaker.paused)
         }
     }
@@ -213,7 +252,7 @@ private struct RailBars: View {
     @ObservedObject private var speaker = Speaker.shared
     @ObservedObject private var clock = Speaker.shared.clock
     var body: some View {
-        PlaybackVisual(style: .bars, playing: !speaker.paused, progress: clock.progress, size: 20, tint: Theme.accent)
+        PlaybackVisual(style: .bars, playing: !speaker.paused, progress: clock.progress, size: 12, tint: Theme.accent)
     }
 }
 
@@ -226,10 +265,10 @@ struct TwoColumns<Left: View, Right: View>: View {
     var body: some View {
         GeometryReader { g in
             HStack(alignment: .top, spacing: g.size.width < 700 ? 12 : 28) {
-                ScrollView { left().padding(.vertical, 12) }
+                ScrollView { left().padding(.top, 24).padding(.bottom, 12) }
                     .scrollIndicators(.hidden)
                     .frame(width: min(g.size.width * 0.44, 560))
-                ScrollView { right().padding(.vertical, 12) }
+                ScrollView { right().padding(.top, 24).padding(.bottom, 12) }
                     .scrollIndicators(.hidden)
                     .frame(maxWidth: .infinity)
             }
