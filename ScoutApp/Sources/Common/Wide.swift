@@ -2,9 +2,8 @@ import SwiftUI
 
 // MARK: - The wide layout (an unfolded inner screen)
 //
-// On a wide screen Today stays on the left, always there; the right side switches between
-// Briefings, Stocks and History with a vertical tab rail on the right edge; whatever's playing runs
-// along the bottom, full width. A story or a stock opens across the whole screen in two columns:
+// Outer screen: one page, tabs on the right edge. Inner screen: Today on the right, always there;
+// the left side switches between Briefings, Stocks and History; what's playing sits bottom right. A story or a stock opens across the whole screen in two columns:
 // the picture and the headline on the left, everything else on the right.
 
 enum WideLayout: String, CaseIterable, Identifiable {
@@ -13,8 +12,8 @@ enum WideLayout: String, CaseIterable, Identifiable {
     static let key = "layout.wide"
     var title: String {
         switch self {
-        case .automatic: return "Automatic (wide screens)"
-        case .on: return "Always"
+        case .automatic: return "Automatic (inner screen)"
+        case .on: return "Fold layout, always"
         case .off: return "Off"
         }
     }
@@ -57,35 +56,50 @@ struct ScoutNavigation<Content: View>: View {
     }
 }
 
-/// Today on the left, the chosen page on the right, the tab rail on the right edge.
+/// The fold layout. Outer screen: one page at a time, the tabs standing on the right edge, stacked
+/// at the bottom. Inner screen: the chosen page on the left, Today on the right (it slides over when
+/// the phone opens) and the tabs beside it; what's playing sits at the bottom of the right side.
 struct WideRoot: View {
     @Binding var tab: Int
     @Binding var showSettings: Bool
     @State private var path = NavigationPath()
-    /// Opens with Today full width, then Today slides to the left and the right side comes in.
+    /// Opens with Today full width, then Today slides to the right and the other page comes in.
     @State private var settled = false
     @ObservedObject private var speaker = Speaker.shared
+
     var body: some View {
         GeometryReader { g in
-            // on a phone forced into this layout, everything shrinks to fit
-            let rail: CGFloat = g.size.width < 700 ? 62 : 78
-            let left = min(max(g.size.width * 0.42, min(360, g.size.width * 0.46)), 540)
+            let two = g.size.width >= 700
+            let rail: CGFloat = two ? 76 : 64
+            let todayWidth = min(max(g.size.width * 0.40, 360), 520)
             NavigationStack(path: $path) {
                 HStack(spacing: 0) {
-                    TodayView(showSettings: $showSettings)
-                        .environment(\.scoutTab, 0)
-                        .frame(width: settled ? left : g.size.width - rail)
-                        .clipped()
-                    Rectangle().fill(Theme.hairline).frame(width: 0.5).ignoresSafeArea()
-                    ZStack {
-                        page(1) { NewsView(showSettings: $showSettings) }
-                        page(2) { StocksView(showSettings: $showSettings) }
-                        page(3) { HistoryView(showSettings: $showSettings) }
+                    if two {
+                        ZStack {
+                            page(1) { NewsView(showSettings: $showSettings) }
+                            page(2) { StocksView(showSettings: $showSettings) }
+                            page(3) { HistoryView(showSettings: $showSettings) }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .opacity(settled ? 1 : 0)
+                        .offset(x: settled ? 0 : -60)
+                        Rectangle().fill(Theme.hairline).frame(width: 0.5).ignoresSafeArea()
+                        TodayView(showSettings: $showSettings)
+                            .environment(\.scoutTab, 0)
+                            .safeAreaInset(edge: .bottom) { player }
+                            .frame(width: settled ? todayWidth : g.size.width - rail)
+                            .clipped()
+                    } else {
+                        ZStack {
+                            page(0) { TodayView(showSettings: $showSettings) }
+                            page(1) { NewsView(showSettings: $showSettings) }
+                            page(2) { StocksView(showSettings: $showSettings) }
+                            page(3) { HistoryView(showSettings: $showSettings) }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .safeAreaInset(edge: .bottom) { player }
                     }
-                    .frame(maxWidth: .infinity)
-                    .opacity(settled ? 1 : 0)
-                    .offset(x: settled ? 0 : 60)
-                    TabRail(tab: $tab, showSettings: $showSettings)
+                    TabRail(tab: $tab, showSettings: $showSettings, todayPinned: two)
                         .frame(width: rail)
                 }
                 .background(Theme.background.ignoresSafeArea())
@@ -93,23 +107,28 @@ struct WideRoot: View {
                 .storyDestinations()
             }
             .tint(Theme.ink)
-            // what's playing runs along the bottom, across both sides
-            .safeAreaInset(edge: .bottom) {
-                if speaker.now != nil, path.isEmpty {
-                    NowPlayingBar()
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 6)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
             .animation(.snappy, value: speaker.now == nil)
+            .onAppear { if two && tab == 0 { tab = 1 } }
+            .onChange(of: two) { _, open in
+                // opening the phone: Today moves to the right; closing it: back to one page
+                if open && tab == 0 { tab = 1 }
+                settled = false
+                withAnimation(.spring(response: 0.65, dampingFraction: 0.86).delay(0.2)) { settled = true }
+            }
         }
         .environment(\.scoutWide, true)
-        .onAppear {
-            if tab == 0 { tab = 1 }
-            withAnimation(.spring(response: 0.65, dampingFraction: 0.86).delay(0.35)) { settled = true }
-        }
+        .onAppear { withAnimation(.spring(response: 0.65, dampingFraction: 0.86).delay(0.35)) { settled = true } }
         .onReceive(NotificationCenter.default.publisher(for: .scoutShowPage)) { _ in path = NavigationPath() }
+    }
+
+    /// What's playing, at the bottom of the right-hand side (hidden while a story is open).
+    @ViewBuilder private var player: some View {
+        if speaker.now != nil, path.isEmpty {
+            NowPlayingBar()
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 
     /// Each page stays alive (its scroll position too) while another one shows.
@@ -122,11 +141,13 @@ struct WideRoot: View {
     }
 }
 
-/// The tabs, standing on the right edge: Today (back to its top), Briefings, Stocks, History,
-/// and Settings at the bottom.
+/// The tabs, standing on the right edge and stacked at the bottom, within reach of your thumb:
+/// Today, Briefings, Stocks, History. Settings sits at the top.
 struct TabRail: View {
     @Binding var tab: Int
     @Binding var showSettings: Bool
+    /// On the inner screen Today is always showing, so its tab just takes it back to the top.
+    var todayPinned = false
 
     private let items: [(Int, String, String)] = [
         (0, "Today", "newspaper"),
@@ -136,46 +157,44 @@ struct TabRail: View {
     ]
 
     var body: some View {
-        VStack(spacing: 8) {
-            ForEach(items, id: \.0) { index, title, symbol in
-                Button {
-                    if index == 0 {
-                        // Today is always on the left: a tap takes it back to the top
-                        NotificationCenter.default.post(name: .scoutScrollTop, object: 0)
-                    } else if index == tab {
-                        NotificationCenter.default.post(name: .scoutScrollTop, object: index)
-                    } else {
-                        withAnimation(.snappy) { tab = index }
-                    }
-                } label: {
-                    let on = index == tab
-                    VStack(spacing: 4) {
-                        Image(systemName: symbol)
-                            .font(.system(size: 19, weight: on ? .bold : .medium))
-                            .frame(width: 50, height: 38)
-                            .background(on ? Theme.accent.opacity(0.14) : Color.clear, in: Capsule())
-                        Text(title).font(.system(size: 10, weight: on ? .bold : .semibold))
-                    }
-                    .foregroundStyle(on ? Theme.accent : (index == 0 ? Theme.text : Theme.secondary))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressStyle())
-                .accessibilityAddTraits(index == tab ? .isSelected : [])
-            }
-            Spacer()
+        VStack(spacing: 6) {
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 17, weight: .medium))
                     .frame(width: 44, height: 44)
                     .foregroundStyle(Theme.secondary)
             }
             .buttonStyle(PressStyle())
             .accessibilityLabel("Settings")
+            Spacer()
+            ForEach(items, id: \.0) { index, title, symbol in
+                Button {
+                    if index == 0 && todayPinned || index == tab {
+                        NotificationCenter.default.post(name: .scoutScrollTop, object: index)
+                    } else {
+                        withAnimation(.snappy) { tab = index }
+                    }
+                } label: {
+                    let on = index == tab || (index == 0 && todayPinned)
+                    VStack(spacing: 3) {
+                        Image(systemName: symbol)
+                            .font(.system(size: 18, weight: on ? .bold : .medium))
+                            .frame(width: 46, height: 34)
+                            .background(index == tab ? Theme.accent.opacity(0.14) : Color.clear, in: Capsule())
+                        Text(title).font(.system(size: 10, weight: on ? .bold : .semibold))
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(index == tab ? Theme.accent : on ? Theme.text : Theme.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 5)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityAddTraits(index == tab ? .isSelected : [])
+            }
         }
-        .padding(.vertical, 18)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 4)
         .frame(maxHeight: .infinity)
         .scoutGlass(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .padding(.vertical, 10)
