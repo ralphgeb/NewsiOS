@@ -12,7 +12,7 @@ permissions:
 jobs:
   screens:
     runs-on: xcode-27
-    timeout-minutes: 50
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
 
@@ -85,27 +85,26 @@ jobs:
           t=open('screens.txt').read()
           for sid,name in re.findall(r'Screen ID: (\d+)\s+Name: (LCD[^\n]*)', t): print(sid)")
             echo "$SLUG screens: $DISPLAYS"
-            # one screen on at a time: folded = the outer screen, opened = the inner one
-            shoot() {   # $1 name, then launch arguments
-              NAME=$1; shift
-              N=0
-              for D in $DISPLAYS; do
-                N=$((N+1))
+            # one screen on at a time (folded = the outer screen, opened = the inner one): switch
+            # once, let it settle, then photograph every tab on it
+            launch() { xcrun simctl terminate "$UDID" com.ralphgeb.scout 2>/dev/null; xcrun simctl launch "$UDID" com.ralphgeb.scout -onboarded YES "$@"; sleep 18; }
+            N=0
+            for D in $DISPLAYS; do
+              N=$((N+1))
+              LABEL=$( [ "$SLUG" = duo ] && { [ $N -eq 1 ] && echo closed || echo open; } || echo screen )
+              if [ "$(echo $DISPLAYS | wc -w)" -gt 1 ]; then
                 for O in $DISPLAYS; do
-                  if [ "$O" = "$D" ]; then xcrun simctl io "$UDID" screenConfig --display="$O" power on
-                  else xcrun simctl io "$UDID" screenConfig --display="$O" power off; fi
+                  if [ "$O" = "$D" ]; then timeout 60 xcrun simctl io "$UDID" screenConfig --display="$O" power on
+                  else timeout 60 xcrun simctl io "$UDID" screenConfig --display="$O" power off; fi
                 done
-                xcrun simctl terminate "$UDID" com.ralphgeb.scout 2>/dev/null
-                xcrun simctl launch "$UDID" com.ralphgeb.scout -onboarded YES "$@"
-                sleep 14
-                LABEL=$( [ "$SLUG" = duo ] && { [ $N -eq 1 ] && echo closed || echo open; } || echo screen )
-                xcrun simctl io "$UDID" screenshot --display="$D" "screens/duo/$SLUG-$LABEL-$NAME.png"
-              done
-            }
-            shoot 1-today -scoutTab 0
-            shoot 2-briefings -scoutTab 1
-            shoot 3-stocks -scoutTab 2
-            [ -n "$STORY" ] && shoot 4-story -scoutStartURL "scout://story/$STORY"
+                sleep 45   # the screen starts up
+              fi
+              shot() { timeout 60 xcrun simctl io "$UDID" screenshot --display="$D" "screens/duo/$SLUG-$LABEL-$1.png"; }
+              launch -scoutTab 0; shot 1-today
+              launch -scoutTab 1; shot 2-briefings
+              launch -scoutTab 2; shot 3-stocks
+              [ -n "$STORY" ] && { launch -scoutStartURL "scout://story/$STORY"; sleep 4; shot 4-story; }
+            done
             xcrun simctl shutdown "$UDID"
           done
           ls -la screens/duo
