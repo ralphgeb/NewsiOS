@@ -21,7 +21,7 @@ struct TodayView: View {
 
     var body: some View {
         let page = store.frontPage(edition: editionID)
-        NavigationStack(path: $path) {
+        ScoutNavigation(path: $path) {
             ScoutPage(showSettings: $showSettings, title: "Today", subtitle: subtitle,
                       onRefresh: {
                           async let news: Void = store.refresh()

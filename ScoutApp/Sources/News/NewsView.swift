@@ -34,7 +34,7 @@ struct NewsView: View {
     @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack(path: $path) {
+        ScoutNavigation(path: $path) {
             ScoutPage(showSettings: $showSettings, title: "Briefing", subtitle: subtitle, pinnedHeight: 50,
                       onRefresh: { await store.refresh() }, isRefreshing: store.isLoading,
                       pageKey: section.rawValue) {

@@ -145,8 +145,39 @@ struct StoryDetailView: View {
     let next: Story?
     let onNext: () -> Void
     let onOpen: (URL) -> Void
+    @Environment(\.scoutWide) private var wide
 
     var body: some View {
+        if wide, let s = store.story(id) {
+            // the picture and the headline on the left, everything else on the right
+            TwoColumns {
+                VStack(alignment: .leading, spacing: 16) {
+                    if s.imageURL != nil {
+                        StoryImage(story: s)
+                            .aspectRatio(4 / 5, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                    }
+                    head(s)
+                }
+            } right: {
+                VStack(alignment: .leading, spacing: 14) {
+                    summaryCard(s)
+                    if !(s.stocks ?? []).isEmpty || !(s.marketTake ?? "").isEmpty { MarketImpactCard(story: s) }
+                    coverage(s)
+                    if let next { upNext(next) }
+                    Text("Summary, odds and market effects are written by AI and can be wrong. Not financial advice.")
+                        .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
+                        .multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                }
+                .padding(.bottom, 24)
+            }
+        } else {
+            narrow
+        }
+    }
+
+    private var narrow: some View {
         ScrollView {
             if let s = store.story(id) {
                 VStack(alignment: .leading, spacing: 14) {

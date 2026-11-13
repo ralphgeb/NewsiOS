@@ -14,7 +14,7 @@ struct HistoryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        ScoutNavigation {
             ScoutPage(showSettings: $showSettings, title: "History", subtitle: subtitle, pinnedHeight: 50,
                       editing: isEmpty ? nil : $editing, pageKey: list.rawValue) {
                 CapsuleSwitcher(items: HistoryList.allCases, selection: $list, title: \.rawValue)

@@ -20,7 +20,7 @@ struct StocksView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        ScoutNavigation {
             ScoutPage(showSettings: $showSettings, title: "Stocks", subtitle: stocks.updatedText,
                       editing: stocks.mine.isEmpty ? nil : $editing,
                       onRefresh: { await refreshAll() }, isRefreshing: stocks.isLoading) {

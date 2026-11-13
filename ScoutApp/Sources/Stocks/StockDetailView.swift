@@ -17,12 +17,39 @@ struct StockDetailView: View {
     private var paywall: Bool { !hasPlus }
     @State private var showPlus = false
     @State private var writing = false
+    @Environment(\.scoutWide) private var wide
 
     private var symbol: String { route.ticker }
 
     var body: some View {
         let q = stocks.quote(symbol)
         let stories = store.stories(mentioning: symbol)
+        Group {
+        if wide {
+            // the price and the chart on the left, the numbers, the AI's view and the news on the right
+            TwoColumns {
+                VStack(alignment: .leading, spacing: 16) {
+                    header(q)
+                    chartCard(q).locked(paywall)
+                }
+            } right: {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        stats(q)
+                        aiCard
+                        headlines
+                    }
+                    .locked(paywall)
+                    if !stories.isEmpty {
+                        SectionHead(title: "In Scout", detail: "\(stories.count) stor\(stories.count == 1 ? "y" : "ies")")
+                        StoryList(stories: Array(stories.prefix(paywall ? 2 : 12)), sequence: stories.map(\.id), locked: paywall)
+                    }
+                    Text("Prices update every 30 minutes on weekdays. The summary is written by AI and can be wrong. Not financial advice.")
+                        .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
+                        .multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                }
+            }
+        } else {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(q)
@@ -47,6 +74,8 @@ struct StockDetailView: View {
             .padding(.vertical, 12)
         }
         .scrollIndicators(.hidden)
+        }
+        }
         .background(Theme.background.ignoresSafeArea())
         .navigationTitle(symbol)
         .navigationBarTitleDisplayMode(.inline)

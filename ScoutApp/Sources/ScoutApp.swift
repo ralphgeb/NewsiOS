@@ -103,8 +103,50 @@ struct RootView: View {
     @State private var showSettings = false
     @State private var showPlus = false
     @State private var tab = 0
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @AppStorage(WideLayout.key) private var wideSetting = WideLayout.automatic.rawValue
 
     var body: some View {
+        GeometryReader { g in
+            if WideLayout.isWide(width: g.size.width, sizeClass: sizeClass, setting: wideSetting) {
+                WideRoot(tab: $tab, showSettings: $showSettings)
+            } else {
+                tabs
+            }
+        }
+        // Colors are read when views draw, so a new look rebuilds the pages (the sheet stays open).
+        .id(look.appearance)
+        .sensoryFeedback(.selection, trigger: tab)
+        .onChange(of: tab, initial: true) { _, t in TabBarState.shared.currentTab = t }
+        .task { await store.refreshIfStale() }
+        .sheet(isPresented: $showPlus) { PlusSheet(reason: "Listening to the briefings is part of Scout Plus.") }
+        .task { Plus.share() }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .environmentObject(store)
+                .environmentObject(look)
+                .environmentObject(weather)
+                .environmentObject(tube)
+        }
+        .onOpenURL { url in
+            // Widget taps open a page: scout://today, scout://news?section=Tech, scout://story/<id>,
+            // scout://stocks, scout://history. Settings closes and the page starts from its top
+            // (or the story), wherever you'd left it.
+            showSettings = false
+            if url.host == "plus" { showPlus = true; return }    // a locked widget button
+            DeepLink.pending = url          // for a page that isn't on screen yet (a cold start)
+            NotificationCenter.default.post(name: .scoutShowPage, object: url)
+            switch url.host {
+            case "news", "story": tab = 1
+            case "stocks": tab = 2
+            case "history", "saved": tab = 3
+            default: tab = 0
+            }
+        }
+    }
+
+    /// The phone layout: the four tabs along the bottom.
+    private var tabs: some View {
         TabView(selection: Binding(get: { tab }, set: { new in
             // tapping the tab you're already on goes back to the top of its page
             if new == tab { NotificationCenter.default.post(name: .scoutScrollTop, object: new) }
@@ -143,37 +185,8 @@ struct RootView: View {
         // iOS 26: the tab bar shrinks to a circle while you scroll down, and what's playing sits
         // beside it (or above it, full width, when it's open)
         .modifier(PlayerTabBar())
-        // Colors are read when views draw, so a new look rebuilds the pages (the sheet stays open).
-        .id(look.appearance)
         // the tab you're on is highlighted in the accent
         .tint(Theme.accent)
-        .sensoryFeedback(.selection, trigger: tab)
-        .onChange(of: tab, initial: true) { _, t in TabBarState.shared.currentTab = t }
-        .task { await store.refreshIfStale() }
-        .sheet(isPresented: $showPlus) { PlusSheet(reason: "Listening to the briefings is part of Scout Plus.") }
-        .task { Plus.share() }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environmentObject(store)
-                .environmentObject(look)
-                .environmentObject(weather)
-                .environmentObject(tube)
-        }
-        .onOpenURL { url in
-            // Widget taps open a page: scout://today, scout://news?section=Tech, scout://story/<id>,
-            // scout://stocks, scout://history. Settings closes and the page starts from its top
-            // (or the story), wherever you'd left it.
-            showSettings = false
-            if url.host == "plus" { showPlus = true; return }    // a locked widget button
-            DeepLink.pending = url          // for a page that isn't on screen yet (a cold start)
-            NotificationCenter.default.post(name: .scoutShowPage, object: url)
-            switch url.host {
-            case "news", "story": tab = 1
-            case "stocks": tab = 2
-            case "history", "saved": tab = 3
-            default: tab = 0
-            }
-        }
     }
 }
 
