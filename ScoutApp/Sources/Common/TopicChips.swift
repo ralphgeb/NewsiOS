@@ -130,7 +130,7 @@ extension Topic {
         case .tech: return ["AI", "Apple", "Google", "Nvidia", "Phones & Gadgets", "Gaming", "Cybersecurity", "Startups & VC", "Tesla & EVs", "Space"]
         case .finance: return ["Markets & Economy", "Central banks", "Crypto", "Deals & Mergers", "Energy", "Health & Biotech"]
         case .world: return ["World politics", "Elections", "Conflict & security", "Trade & tariffs", "Climate"]
-        case .fashion: return ["Fashion & Luxury", "Designers & Shows", "Beauty"]
+        case .fashion: return ["Fashion & Luxury", "Designers & Shows", "Beauty", "Architecture", "Design"]
         }
     }
 
@@ -140,7 +140,7 @@ extension Topic {
         case .tech: return "Tech"
         case .finance: return "Money"
         case .world: return "World"
-        case .fashion: return "Style"
+        case .fashion: return "Style & Design"
         }
     }
 }

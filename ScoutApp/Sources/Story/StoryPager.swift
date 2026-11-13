@@ -252,7 +252,7 @@ struct StoryDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach([s.newsSection.title] + (s.topics ?? []).filter { $0 != "Other" }, id: \.self) { t in
+                    ForEach((s.isDesign ? [] : [s.newsSection.title]) + (s.topics ?? []).filter { $0 != "Other" }, id: \.self) { t in
                         Text(t)
                             .font(.system(size: 11, weight: .semibold))
                             .padding(.horizontal, 8)

@@ -30,7 +30,7 @@ struct StockDetailView: View {
             TwoColumns {
                 VStack(alignment: .leading, spacing: 16) {
                     header(q)
-                    chartCard(q).locked(paywall)
+                    chartCard(q)
                 }
             } right: {
                 VStack(alignment: .leading, spacing: 16) {
@@ -53,9 +53,9 @@ struct StockDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header(q)
-                // without Scout Plus the stock's details are blurred under one lock
+                // without Scout Plus the chart stays open; the details under it are blurred under one lock
+                chartCard(q)
                 VStack(alignment: .leading, spacing: 16) {
-                    chartCard(q)
                     stats(q)
                     aiCard
                     headlines

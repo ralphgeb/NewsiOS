@@ -53,12 +53,14 @@ struct StockCard: View {
 
             if isOpen {
                 VStack(alignment: .leading, spacing: 12) {
+                    // without Scout Plus everything the card opens to is under one lock (the
+                    // charts stay open, one tap away)
+                    VStack(alignment: .leading, spacing: 12) {
                     if let text = summary?.summary {
                         Text(text)
                             .font(.system(size: 14)).lineSpacing(2)
                             .foregroundStyle(Theme.text.opacity(0.8))
                             .fixedSize(horizontal: false, vertical: true)
-                            .locked(!hasPlus)
                     }
                     if !pulse.reasons.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
@@ -85,6 +87,9 @@ struct StockCard: View {
                             }
                         }
                     }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .locked(!hasPlus)
                     // a quiet row, like the app's other links, rather than a big button
                     NavigationLink(value: TickerRoute(ticker: symbol, name: stocks.name(symbol))) {
                         HStack {

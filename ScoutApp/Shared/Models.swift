@@ -72,6 +72,10 @@ struct Story: Codable, Identifiable, Hashable {
     var outletName: String { lead?.name ?? newsSection.title }
     var outletCount: Int { max(1, sources?.count ?? 1) }
 
+    /// From the architecture and design sites: shown in For you to those who follow Architecture
+    /// or Design, never in a Briefings section.
+    var isDesign: Bool { (section ?? "").lowercased() == "design" }
+
     var newsSection: Topic {
         switch (section ?? "").lowercased() {
         case "markets", "finance": return .finance
@@ -436,7 +440,7 @@ enum Topic: String, CaseIterable, Identifiable, Codable {
                     "Phones & Gadgets", "Computers", "Gaming", "Software & Apps", "Cybersecurity",
                     "Streaming & Media", "Social media", "Startups & VC", "Telecoms", "Space", "Science"]
         case .fashion:
-            return ["Fashion & Luxury", "Designers & Shows", "Beauty", "Retail"]
+            return ["Fashion & Luxury", "Designers & Shows", "Beauty", "Retail", "Architecture", "Design"]
         case .finance:
             return ["Markets & Economy", "Banks & Finance", "Deals & Mergers", "Crypto", "Central banks",
                     "Commodities", "Energy", "Cars", "Health & Biotech", "UK business"]

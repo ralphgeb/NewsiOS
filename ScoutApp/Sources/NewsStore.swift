@@ -251,7 +251,7 @@ final class NewsStore: ObservableObject {
                 }
                 return s.published.addingTimeInterval(shift)
             }
-            let newest = all.filter { $0.newsSection == topic }.sorted { key($0) > key($1) }
+            let newest = all.filter { $0.newsSection == topic && !$0.isDesign }.sorted { key($0) > key($1) }
             return Self.varied(newest, byRegion: topic == .finance || topic == .world)
         }
         return forYou(fresh, now: now)
@@ -295,7 +295,11 @@ final class NewsStore: ObservableObject {
     /// mixed in so nothing major passes you by, and never more than three in a row on one topic.
     /// Before any topics are picked it's simply the most important stories.
     func forYou(_ pool: [Story], now: Date = .now) -> [Story] {
-        let picked = interests.isEmpty ? pool : pool.filter { matchesInterests($0) || ($0.importance ?? 0) >= 8 }
+        // architecture and design stories only for those who follow Architecture or Design
+        let picked = pool.filter { s in
+            if s.isDesign { return matchesInterests(s) }
+            return interests.isEmpty || matchesInterests(s) || (s.importance ?? 0) >= 8
+        }
         let scores = Dictionary(picked.map { s in
             (s.id, rankScore(s, now: now) + (interests.isEmpty ? 0 : (matchesInterests(s) ? 4 : 0) + Self.regionWeight(s)))
         }, uniquingKeysWith: { a, _ in a })
@@ -408,7 +412,7 @@ final class NewsStore: ObservableObject {
         if !interests.isEmpty { return forYouPage() }
         let since = Date.now.addingTimeInterval(-30 * 3600)
         let pool = stories
-            .filter { $0.newsSection == topic && $0.published >= since }
+            .filter { $0.newsSection == topic && !$0.isDesign && $0.published >= since }
             .sorted { storyScore($0) > storyScore($1) }
 
         if topic == .tech {
@@ -466,7 +470,9 @@ final class NewsStore: ObservableObject {
         let cover = ranked.prefix(4).first { $0.imageURL != nil } ?? ranked[0]
         let rest = ranked.filter { $0.id != cover.id }
         // the sections your topics belong to, for their briefings' movers
-        let sections = Topic.allCases.filter { t in t.interests.contains { interests.contains($0) } }
+        let sections = Topic.allCases.filter { t in
+            t.interests.contains { interests.contains($0) && $0 != "Architecture" && $0 != "Design" }
+        }
         var seen = Set<String>()
         let movers = sections.compactMap { briefing.section($0) }.flatMap(\.movers).filter { seen.insert($0.ticker).inserted }
         return FrontPage(
