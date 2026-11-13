@@ -154,19 +154,19 @@ struct StoryDetailView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if s.imageURL != nil {
                         StoryImage(story: s)
-                            .aspectRatio(1, contentMode: .fit)
+                            .aspectRatio(3 / 2, contentMode: .fit)
                             .frame(maxWidth: .infinity)
                             .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
                     }
                     head(s)
+                    // market impact sits under the headline, on the left
+                    if !(s.stocks ?? []).isEmpty || !(s.marketTake ?? "").isEmpty { MarketImpactCard(story: s) }
                 }
             } right: {
                 VStack(alignment: .leading, spacing: 14) {
                     summaryCard(s)
                     coverage(s)
                     if let next { upNext(next) }
-                    // market impact closes the right-hand side
-                    if !(s.stocks ?? []).isEmpty || !(s.marketTake ?? "").isEmpty { MarketImpactCard(story: s) }
                     Text("Summary, odds and market effects are written by AI and can be wrong. Not financial advice.")
                         .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
                         .multilineTextAlignment(.center).frame(maxWidth: .infinity)

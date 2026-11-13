@@ -56,61 +56,60 @@ struct ScoutNavigation<Content: View>: View {
     }
 }
 
-/// The fold layout. Outer screen: one page at a time, the tabs standing on the right edge, stacked
-/// at the bottom. Inner screen: the chosen page on the left, Today on the right (it slides over when
-/// the phone opens) and the tabs beside it; what's playing sits at the bottom of the right side.
+/// The fold layout. Outer screen: one page at a time. Inner screen: Today on the left (it slides
+/// over when the phone opens) and the chosen page on the right. On both, the tabs stand on the
+/// right edge, always there (stories open beside them), with what's playing as a pill above them.
 struct WideRoot: View {
     @Binding var tab: Int
     @Binding var showSettings: Bool
     @State private var path = NavigationPath()
-    /// Opens with Today full width, then Today slides to the right and the other page comes in.
+    /// Opens with Today full width, then Today moves to the left and the other page comes in.
     @State private var settled = false
-    @ObservedObject private var speaker = Speaker.shared
 
     var body: some View {
         GeometryReader { g in
             let two = g.size.width >= 700
             let rail: CGFloat = two ? 76 : 64
-            let todayWidth = min(max(g.size.width * 0.40, 360), 520)
-            NavigationStack(path: $path) {
-                HStack(spacing: 0) {
-                    if two {
-                        ZStack {
-                            page(1) { NewsView(showSettings: $showSettings) }
-                            page(2) { StocksView(showSettings: $showSettings) }
-                            page(3) { HistoryView(showSettings: $showSettings) }
+            let todayWidth = min(max((g.size.width - rail) * 0.42, 360), 520)
+            HStack(spacing: 0) {
+                NavigationStack(path: $path) {
+                    HStack(spacing: 0) {
+                        if two {
+                            TodayView(showSettings: $showSettings)
+                                .environment(\.scoutTab, 0)
+                                .frame(width: settled ? todayWidth : g.size.width - rail)
+                                .clipped()
+                            Rectangle().fill(Theme.hairline).frame(width: 0.5).ignoresSafeArea()
+                            ZStack {
+                                page(1) { NewsView(showSettings: $showSettings) }
+                                page(2) { StocksView(showSettings: $showSettings) }
+                                page(3) { HistoryView(showSettings: $showSettings) }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .opacity(settled ? 1 : 0)
+                            .offset(x: settled ? 0 : 60)
+                        } else {
+                            ZStack {
+                                page(0) { TodayView(showSettings: $showSettings) }
+                                page(1) { NewsView(showSettings: $showSettings) }
+                                page(2) { StocksView(showSettings: $showSettings) }
+                                page(3) { HistoryView(showSettings: $showSettings) }
+                            }
+                            .frame(maxWidth: .infinity)
                         }
-                        .frame(maxWidth: .infinity)
-                        .opacity(settled ? 1 : 0)
-                        .offset(x: settled ? 0 : -60)
-                        Rectangle().fill(Theme.hairline).frame(width: 0.5).ignoresSafeArea()
-                        TodayView(showSettings: $showSettings)
-                            .environment(\.scoutTab, 0)
-                            .safeAreaInset(edge: .bottom) { player }
-                            .frame(width: settled ? todayWidth : g.size.width - rail)
-                            .clipped()
-                    } else {
-                        ZStack {
-                            page(0) { TodayView(showSettings: $showSettings) }
-                            page(1) { NewsView(showSettings: $showSettings) }
-                            page(2) { StocksView(showSettings: $showSettings) }
-                            page(3) { HistoryView(showSettings: $showSettings) }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .safeAreaInset(edge: .bottom) { player }
                     }
-                    TabRail(tab: $tab, showSettings: $showSettings, todayPinned: two)
-                        .frame(width: rail)
+                    .background(Theme.background.ignoresSafeArea())
+                    .toolbar(.hidden, for: .navigationBar)
+                    .storyDestinations()
                 }
-                .background(Theme.background.ignoresSafeArea())
-                .toolbar(.hidden, for: .navigationBar)
-                .storyDestinations()
+                .tint(Theme.ink)
+                TabRail(tab: $tab, showSettings: $showSettings, todayPinned: two, onTab: { path = NavigationPath() })
+                    .frame(width: rail)
             }
-            .tint(Theme.ink)
-            .animation(.snappy, value: speaker.now == nil)
+            .background(Theme.background.ignoresSafeArea())
             .onAppear { if two && tab == 0 { tab = 1 } }
             .onChange(of: two) { _, open in
-                // opening the phone: Today moves to the right; closing it: back to one page
+                // opening the phone: Today moves to the left; closing it: back to one page
                 if open && tab == 0 { tab = 1 }
                 settled = false
                 withAnimation(.spring(response: 0.65, dampingFraction: 0.86).delay(0.2)) { settled = true }
@@ -119,16 +118,6 @@ struct WideRoot: View {
         .environment(\.scoutWide, true)
         .onAppear { withAnimation(.spring(response: 0.65, dampingFraction: 0.86).delay(0.35)) { settled = true } }
         .onReceive(NotificationCenter.default.publisher(for: .scoutShowPage)) { _ in path = NavigationPath() }
-    }
-
-    /// What's playing, at the bottom of the right-hand side (hidden while a story is open).
-    @ViewBuilder private var player: some View {
-        if speaker.now != nil, path.isEmpty {
-            NowPlayingBar()
-                .padding(.horizontal, 12)
-                .padding(.bottom, 6)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
     }
 
     /// Each page stays alive (its scroll position too) while another one shows.
@@ -141,6 +130,67 @@ struct WideRoot: View {
     }
 }
 
+/// What's playing, as a pill in the tab rail: the artwork, the bars moving with the sound, and
+/// play/pause. Tap the artwork to go to what's playing.
+struct RailPlayer: View {
+    @ObservedObject private var speaker = Speaker.shared
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        if let now = speaker.now {
+            VStack(spacing: 8) {
+                Button { open(now) } label: {
+                    Group {
+                        if let url = now.artwork {
+                            RemoteImage(url: url) { Theme.accent.opacity(0.15) }
+                        } else {
+                            ZStack {
+                                Theme.accent.opacity(0.15)
+                                Image(systemName: "headphones").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.accent)
+                            }
+                        }
+                    }
+                    .frame(width: 40, height: 40)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityLabel("Now playing: \(now.title)")
+                RailBars()
+                Button { speaker.toggle() } label: {
+                    Image(systemName: speaker.paused ? "play.fill" : "pause.fill")
+                        .font(.system(size: 13, weight: .black))
+                        .frame(width: 34, height: 34)
+                        .background(Theme.accent, in: Circle())
+                        .foregroundStyle(.white)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(PressStyle())
+                .accessibilityLabel(speaker.paused ? "Play" : "Pause")
+            }
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(Theme.accent.opacity(0.1), in: Capsule())
+            .padding(.horizontal, 6)
+            .transition(.scale.combined(with: .opacity))
+            .sensoryFeedback(.selection, trigger: speaker.paused)
+        }
+    }
+
+    private func open(_ now: NowPlaying) {
+        if let id = now.storyID, let url = URL(string: "scout://story/\(id)") { openURL(url) }
+        else if let section = now.section, let url = URL(string: "scout://news?section=\(section)") { openURL(url) }
+    }
+}
+
+/// The bars, moving while the sound plays (only this redraws as the clock ticks).
+private struct RailBars: View {
+    @ObservedObject private var speaker = Speaker.shared
+    @ObservedObject private var clock = Speaker.shared.clock
+    var body: some View {
+        PlaybackVisual(style: .bars, playing: !speaker.paused, progress: clock.progress, size: 20, tint: Theme.accent)
+    }
+}
+
 /// The tabs, standing on the right edge and stacked at the bottom, within reach of your thumb:
 /// Today, Briefings, Stocks, History. Settings sits at the top.
 struct TabRail: View {
@@ -148,6 +198,9 @@ struct TabRail: View {
     @Binding var showSettings: Bool
     /// On the inner screen Today is always showing, so its tab just takes it back to the top.
     var todayPinned = false
+    /// Called when a tab is chosen (an open story closes).
+    var onTab: () -> Void = {}
+    @ObservedObject private var speaker = Speaker.shared
 
     private let items: [(Int, String, String)] = [
         (0, "Today", "newspaper"),
@@ -167,8 +220,11 @@ struct TabRail: View {
             .buttonStyle(PressStyle())
             .accessibilityLabel("Settings")
             Spacer()
+            RailPlayer()
+                .padding(.bottom, 6)
             ForEach(items, id: \.0) { index, title, symbol in
                 Button {
+                    onTab()
                     if index == 0 && todayPinned || index == tab {
                         NotificationCenter.default.post(name: .scoutScrollTop, object: index)
                     } else {
@@ -200,6 +256,7 @@ struct TabRail: View {
         .padding(.vertical, 10)
         .padding(.trailing, 8)
         .sensoryFeedback(.selection, trigger: tab)
+        .animation(.snappy, value: speaker.now == nil)
     }
 }
 
