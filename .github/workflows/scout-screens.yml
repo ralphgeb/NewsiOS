@@ -76,7 +76,9 @@ jobs:
           done
           [ -n "$UDID" ] || { echo "::error::The iPhone Duo simulator couldn't be created"; exit 1; }
           # the Simulator app (it holds the Device menu that folds and unfolds the Duo)
-          open -a Simulator --args -CurrentDeviceUDID "$UDID"
+          SIMAPP="$(xcode-select -p)/Applications/Simulator.app"
+          echo "Simulator app: $SIMAPP"
+          open "$SIMAPP" --args -CurrentDeviceUDID "$UDID" || echo "::warning::Couldn't open the Simulator app"
           xcrun simctl boot "$UDID" 2>/dev/null || true
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl status_bar "$UDID" override --time "9:41" --batteryLevel 100 --batteryState charged --cellularBars 4 --wifiBars 3 || true
