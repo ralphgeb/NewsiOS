@@ -26,9 +26,6 @@ struct ScoutPage<Pinned: View, Content: View>: View {
     @State private var scroll = PageScroll()
     @Environment(\.scoutTab) private var tab
     // The iPhone Duo only (an ordinary iPhone lays the page out exactly as before):
-    /// The space the page has (the scroll view less its side insets): the page is laid out to
-    /// exactly this, so turning the opened Duo lays it out again straight away.
-    @State private var pageWidth: CGFloat = 0
     @Environment(\.scoutDuo) private var duo
     /// The opened Duo upright: iOS's status bar runs across the top and the page goes up into it.
     @Environment(\.statusBand) private var statusBand
@@ -38,6 +35,7 @@ struct ScoutPage<Pinned: View, Content: View>: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            DuoMeasured(on: duo) { pageWidth in
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 16) { content() }
@@ -52,9 +50,6 @@ struct ScoutPage<Pinned: View, Content: View>: View {
                         .background(alignment: .top) { Color.clear.frame(height: 1).id(RememberScroll.top) }
                 }
                 .coordinateSpace(name: "page")
-                .onGeometryChange(for: CGFloat.self) {
-                    $0.size.width - $0.safeAreaInsets.leading - $0.safeAreaInsets.trailing
-                } action: { if duo { pageWidth = $0 } }
                 .modifier(TrackScrollOffset(scroll: scroll, pinned: PageHeader.height + pinnedHeight, editing: editing?.wrappedValue == true))
                 .modifier(RememberScroll(key: pageKey, scroll: scroll))
                 .modifier(ScrollRelease(scroll: scroll) { pulled in
@@ -68,6 +63,7 @@ struct ScoutPage<Pinned: View, Content: View>: View {
                     withAnimation(.snappy) { proxy.scrollTo(RememberScroll.top, anchor: .top) }
                     scroll.show()
                 }
+            }
             }
 
             PageHeaderLayer(scroll: scroll, pinnedHeight: pinnedHeight) {
@@ -91,8 +87,22 @@ struct ScoutPage<Pinned: View, Content: View>: View {
     }
 }
 
-/// The page's width: the screen's on an ordinary iPhone (as it always was); on the iPhone Duo the
-/// measured width, which follows a turn of the opened screen without a lag.
+/// On the iPhone Duo only: the width the page really has, read in the same layout pass (no stored
+/// value that can go stale when the Duo is opened, closed or turned). Elsewhere it does nothing.
+struct DuoMeasured<C: View>: View {
+    let on: Bool
+    @ViewBuilder var content: (CGFloat) -> C
+    var body: some View {
+        if on {
+            GeometryReader { g in content(g.size.width) }
+        } else {
+            content(0)
+        }
+    }
+}
+
+/// The page's width: the screen's on an ordinary iPhone (as it always was); on the iPhone Duo
+/// exactly the space the page has, so it fills it edge to edge and follows a turn straight away.
 private struct PageWidth: ViewModifier {
     let duo: Bool
     let width: CGFloat

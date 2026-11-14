@@ -40,8 +40,12 @@ struct StoryPager: View {
         TabBarState.shared.storyPage(in: tab, open: false)
     }
 
+    @Environment(\.scoutDuo) private var duo
+
     var body: some View {
         let list = ids
+        // the Duo: each story exactly the width there is, read as the screen opens, closes or turns
+        DuoMeasured(on: duo) { width in
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(Array(list.enumerated()), id: \.element) { i, id in
@@ -51,7 +55,7 @@ struct StoryPager: View {
                                     onOpen: { reading = WebLink(url: $0) },
                                     others: duoInner ? Array((list[(i + 1)...] + list[..<i]).prefix(12)) : [],
                                     onPick: { picked in withAnimation(.snappy) { current = picked } })
-                        .containerRelativeFrame(.horizontal)
+                        .modifier(StoryWidth(duo: duo, width: width))
                         .id(id)
                 }
             }
@@ -59,6 +63,7 @@ struct StoryPager: View {
         }
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $current)
+        }
         // every story you read goes into History: once you've stayed on it a moment, so a swipe
         // never waits for it
         .task(id: current) {
@@ -153,10 +158,11 @@ struct StoryDetailView: View {
     var others: [String] = []
     var onPick: (String) -> Void = { _ in }
     @Environment(\.scoutWide) private var wide
+    @Environment(\.duoInner) private var duoInner
 
     var body: some View {
-        if wide, let s = store.story(id) {
-            // the picture and the headline on the left, everything else on the right
+        if wide || duoInner, let s = store.story(id) {
+            // the opened Duo: the picture and the headline on the left, everything else on the right
             TwoColumns {
                 VStack(alignment: .leading, spacing: 16) {
                     if s.imageURL != nil {
@@ -382,6 +388,16 @@ struct StoryDetailView: View {
             .scoutCard(padding: 16)
         }
         .buttonStyle(PressStyle())
+    }
+}
+
+/// A story's width in the pager: the screen's on an ordinary iPhone (as always); on the Duo the
+/// width measured in the same pass.
+private struct StoryWidth: ViewModifier {
+    let duo: Bool
+    let width: CGFloat
+    func body(content: Content) -> some View {
+        if duo { content.frame(width: width) } else { content.containerRelativeFrame(.horizontal) }
     }
 }
 
