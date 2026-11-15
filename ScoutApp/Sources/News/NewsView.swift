@@ -39,7 +39,8 @@ struct NewsView: View {
         ScoutNavigation(path: $path) {
             ScoutPage(showSettings: $showSettings, title: "Briefing", subtitle: subtitle, pinnedHeight: 50,
                       onRefresh: { await store.refresh() }, isRefreshing: store.isLoading,
-                      pageKey: section.rawValue) {
+                      pageKey: section.rawValue,
+                      split: wide && !store.stories.isEmpty && !store.newsItems(section).isEmpty) {
                 CapsuleSwitcher(items: NewsSection.allCases, selection: sectionBinding, title: \.rawValue, fill: true)
                     .frame(height: 46)
                     .padding(.bottom, 4)
@@ -128,16 +129,25 @@ struct NewsView: View {
                 let cover = section.topic.flatMap { store.briefing.section($0) }
                 let hero = cover == nil ? heroPick(items, section) : nil
                 if wide {
-                    HStack(alignment: .top, spacing: 18) {
-                        VStack(spacing: 14) { coverBlock(section, cover: cover, hero: hero, seq: seq) }
-                            .frame(maxWidth: .infinity, alignment: .top)
-                        VStack(spacing: 14) { latestBlock(all: all, items: items, hero: hero, seq: seq) }
-                            .frame(maxWidth: .infinity, alignment: .top)
+                    // the opened Duo sideways: the briefing on the left, the stories on the right,
+                    // each side scrolling on its own
+                    DuoColumns(onRefresh: { await store.refresh() }) {
+                        coverBlock(section, cover: cover, hero: hero, seq: seq)
+                    } right: {
+                        latestBlock(all: all, items: items, hero: hero, seq: seq)
+                        showMore(section, all: all, items: items)
                     }
                 } else {
                     coverBlock(section, cover: cover, hero: hero, seq: seq)
                     latestBlock(all: all, items: items, hero: hero, seq: seq)
+                    showMore(section, all: all, items: items)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func showMore(_ section: NewsSection, all: [Story], items: [Story]) -> some View {
                 if all.count > items.count, !paywall {
                     Button {
                         withAnimation(.snappy) { limits[section, default: 40] += 40 }
@@ -150,8 +160,6 @@ struct NewsView: View {
                     }
                     .buttonStyle(PressStyle())
                 }
-            }
-        }
     }
 
     /// The section's briefing (or its picture story).

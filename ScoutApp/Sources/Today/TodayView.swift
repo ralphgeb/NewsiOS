@@ -27,25 +27,17 @@ struct TodayView: View {
         let page = store.frontPage(edition: editionID)
         ScoutNavigation(path: $path) {
             ScoutPage(showSettings: $showSettings, title: "Today", subtitle: subtitle,
-                      onRefresh: {
-                          async let news: Void = store.refresh()
-                          async let sky: Void = weather.refresh(force: true)
-                          async let trains: Void = tube.refresh(force: true)
-                          _ = await (news, sky, trains)
-                      }, isRefreshing: store.isLoading) {
+                      onRefresh: { await refreshAll() }, isRefreshing: store.isLoading,
+                      split: wide && !editing && page != nil) {
                 if let page, wide, !editing {
-                    // the weather and Top stories on the left, More for you and the rest on the right
+                    // the opened Duo sideways: the weather and Top stories on the left, More for you
+                    // and the rest on the right, each side scrolling on its own
                     let cards = visible(page)
-                    HStack(alignment: .top, spacing: 18) {
-                        VStack(spacing: 14) {
-                            ForEach(cards.filter { Self.leftCards.contains($0) }) { cardView($0, page: page) }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .top)
-                        VStack(spacing: 14) {
-                            ForEach(rightOrder(cards)) { cardView($0, page: page) }
-                            footer(page)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .top)
+                    DuoColumns(onRefresh: { await refreshAll() }) {
+                        ForEach(cards.filter { Self.leftCards.contains($0) }) { cardView($0, page: page) }
+                    } right: {
+                        ForEach(rightOrder(cards)) { cardView($0, page: page) }
+                        footer(page)
                     }
                 } else if let page {
                     ForEach(visible(page)) { card in
@@ -100,6 +92,13 @@ struct TodayView: View {
         // the weather and the metro share one card, where the first of the two sits
         guard let first = list.first(where: { $0 == .weather || $0 == .tube }) else { return list }
         return list.filter { ($0 != .weather && $0 != .tube) || $0 == first }
+    }
+
+    private func refreshAll() async {
+        async let news: Void = store.refresh()
+        async let sky: Void = weather.refresh(force: true)
+        async let trains: Void = tube.refresh(force: true)
+        _ = await (news, sky, trains)
     }
 
     /// The right-hand column: More for you first, then the rest in your order.

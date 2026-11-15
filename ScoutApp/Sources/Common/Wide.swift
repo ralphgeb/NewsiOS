@@ -256,6 +256,71 @@ private struct RailBars: View {
     }
 }
 
+/// The opened Duo held sideways: a page's two panes, side by side under its fixed header, each
+/// scrolling on its own (as two-screen apps do, so it never feels like one wide sheet). Anything in
+/// `top` (the markets strip on Stocks) runs across both and stays put. Pull either pane to refresh;
+/// tap the tab you're on to take both back to the top.
+struct DuoColumns<Top: View, Left: View, Right: View>: View {
+    var onRefresh: (() async -> Void)? = nil
+    @ViewBuilder var top: () -> Top
+    @ViewBuilder var left: () -> Left
+    @ViewBuilder var right: () -> Right
+    @Environment(\.scoutTab) private var tab
+
+    var body: some View {
+        VStack(spacing: 12) {
+            top()
+                .padding(.horizontal, Design.sideMargin)
+            HStack(alignment: .top, spacing: 0) {
+                pane { left() }
+                // a hairline between the two sides
+                Rectangle().fill(Theme.hairline).frame(width: 0.5).padding(.vertical, 6)
+                pane { right() }
+            }
+        }
+        .padding(.top, 8)
+    }
+
+    private func pane<V: View>(@ViewBuilder _ content: () -> V) -> some View {
+        let inner = content()
+        return ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 14) {
+                    Color.clear.frame(height: 0).id("duo.top")
+                    inner
+                }
+                .padding(.horizontal, Design.sideMargin)
+                .padding(.top, 2)
+                .padding(.bottom, 36)
+            }
+            .scrollIndicators(.hidden)
+            .modifier(PaneRefresh(onRefresh: onRefresh))
+            .onReceive(NotificationCenter.default.publisher(for: .scoutScrollTop)) { note in
+                guard (note.object as? Int) == tab else { return }
+                withAnimation(.snappy) { proxy.scrollTo("duo.top", anchor: .top) }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension DuoColumns where Top == EmptyView {
+    init(onRefresh: (() async -> Void)? = nil, @ViewBuilder left: @escaping () -> Left, @ViewBuilder right: @escaping () -> Right) {
+        self.onRefresh = onRefresh
+        self.top = { EmptyView() }
+        self.left = left
+        self.right = right
+    }
+}
+
+/// Pull to refresh on a pane, when the page can refresh.
+private struct PaneRefresh: ViewModifier {
+    let onRefresh: (() async -> Void)?
+    func body(content: Content) -> some View {
+        if let onRefresh { content.refreshable { await onRefresh() } } else { content }
+    }
+}
+
 /// Two columns for a story or a stock on a wide screen: the left one stays put while the right
 /// one scrolls.
 struct TwoColumns<Left: View, Right: View>: View {

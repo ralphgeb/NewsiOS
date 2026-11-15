@@ -25,22 +25,27 @@ struct StocksView: View {
         ScoutNavigation {
             ScoutPage(showSettings: $showSettings, title: "Stocks", subtitle: stocks.updatedText,
                       editing: stocks.mine.isEmpty ? nil : $editing,
-                      onRefresh: { await refreshAll() }, isRefreshing: stocks.isLoading) {
-                markets
+                      onRefresh: { await refreshAll() }, isRefreshing: stocks.isLoading, split: wide) {
                 if wide {
-                    // your stocks and the ones in the news on the left, the top ten on the right
-                    HStack(alignment: .top, spacing: 18) {
-                        VStack(spacing: 16) { yours; inNews }.frame(maxWidth: .infinity, alignment: .top)
-                        VStack(spacing: 16) { topTen }.frame(maxWidth: .infinity, alignment: .top)
+                    // the opened Duo sideways: the markets across the top and staying put; your stocks
+                    // and the ones in the news on the left, the top ten on the right, each side
+                    // scrolling on its own
+                    DuoColumns(onRefresh: { await refreshAll() }) {
+                        markets
+                    } left: {
+                        yours
+                        inNews
+                    } right: {
+                        topTen
+                        footnote
                     }
                 } else {
+                    markets
                     yours
                     inNews
                     topTen
+                    footnote
                 }
-                Text("Prices update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Tap a change to switch between %, the price change and market value. AI summaries are written each morning. Not financial advice.")
-                    .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
-                    .multilineTextAlignment(.center).padding(.horizontal, 20)
             }
             .storyDestinations()
             .task { await stocks.refreshFileIfStale() }
@@ -53,6 +58,12 @@ struct StocksView: View {
     }
 
     private func refreshAll() async { await stocks.refreshFile() }
+
+    private var footnote: some View {
+        Text("Prices update every 30 minutes on weekdays, 7:00 to 22:30 UK time. Tap a change to switch between %, the price change and market value. AI summaries are written each morning. Not financial advice.")
+            .font(.system(size: 12)).foregroundStyle(Theme.tertiary)
+            .multilineTextAlignment(.center).padding(.horizontal, 20)
+    }
 
     /// Markets, across the top.
     @ViewBuilder private var markets: some View {

@@ -18,6 +18,9 @@ struct ScoutPage<Pinned: View, Content: View>: View {
     /// Which page of several is showing (News's sections): each keeps its own place, and one
     /// you haven't scrolled yet opens at the top.
     var pageKey: String? = nil
+    /// The opened iPhone Duo held sideways only: the header stays put and the page below is two
+    /// panes that each scroll on their own (the content is a `DuoColumns`). Never on an ordinary iPhone.
+    var split = false
     @ViewBuilder var pinned: () -> Pinned
     @ViewBuilder var content: () -> Content
 
@@ -34,6 +37,29 @@ struct ScoutPage<Pinned: View, Content: View>: View {
     private var topPad: CGFloat { statusBand > 0 ? 10 : (wide ? 18 : 0) }
 
     var body: some View {
+        if split && duo {
+            splitBody
+        } else {
+            scrollingBody
+        }
+    }
+
+    /// The Duo sideways: the header and any pinned content fixed at the top, two panes under them.
+    private var splitBody: some View {
+        VStack(spacing: 0) {
+            PageHeader(title: title, subtitle: subtitle, showSettings: $showSettings,
+                       editing: editing, isRefreshing: isRefreshing, pull: 0)
+                .padding(.top, topPad)
+                .padding(.trailing, statusBand > 0 ? 48 : 0)
+            pinned()
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .background(Theme.background.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+    }
+
+    private var scrollingBody: some View {
         ZStack(alignment: .top) {
             DuoMeasured(on: duo) { pageWidth in
             ScrollViewReader { proxy in
@@ -169,7 +195,7 @@ private struct PageHeaderLayer<H: View>: View {
 
 extension ScoutPage where Pinned == EmptyView {
     init(showSettings: Binding<Bool>, title: String, subtitle: String, editing: Binding<Bool>? = nil,
-         onRefresh: (() async -> Void)? = nil, isRefreshing: Bool = false,
+         onRefresh: (() async -> Void)? = nil, isRefreshing: Bool = false, split: Bool = false,
          @ViewBuilder content: @escaping () -> Content) {
         self._showSettings = showSettings
         self.title = title
@@ -177,6 +203,7 @@ extension ScoutPage where Pinned == EmptyView {
         self.editing = editing
         self.onRefresh = onRefresh
         self.isRefreshing = isRefreshing
+        self.split = split
         self.pinnedHeight = 0
         self.pinned = { EmptyView() }
         self.content = content
