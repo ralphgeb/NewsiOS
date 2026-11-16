@@ -46,11 +46,26 @@ enum DuoScreen {
     /// iPhone's screen is at least 1.7 times as tall as it's wide). Read from the screen itself,
     /// never from the space a page gets, so the keyboard or a sheet can't flip the layout.
     @MainActor static var isFoldable: Bool {
+        // only on an iPhone: an iPad or a Mac running Scout as an iPhone app keeps the phone layout
+        guard isIPhoneHardware else { return false }
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let b = scene?.screen.bounds ?? UIScreen.main.bounds
         let long = max(b.width, b.height), short = max(1, min(b.width, b.height))
         return long / short < 1.6
     }
+    /// The hardware is an iPhone (iPhone19,4 for the Duo), not an iPad or a Mac running the
+    /// iPhone app; in the simulator, the simulated device's model.
+    static var isIPhoneHardware: Bool {
+        if ProcessInfo.processInfo.isiOSAppOnMac || ProcessInfo.processInfo.isMacCatalystApp { return false }
+        if let sim = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] { return sim.hasPrefix("iPhone") }
+        var size = 0
+        sysctlbyname("hw.machine", nil, &size, nil, 0)
+        guard size > 0 else { return true }
+        var name = [CChar](repeating: 0, count: size)
+        sysctlbyname("hw.machine", &name, &size, nil, 0)
+        return String(cString: name).hasPrefix("iPhone")
+    }
+
     /// The opened Duo: the big screen (the outer one is under 560 points across).
     static func inner(_ size: CGSize) -> Bool { min(size.width, size.height) >= 560 }
     /// Wide enough for two phone-width columns: the opened Duo held sideways.
@@ -196,7 +211,7 @@ enum DuoOrientation {
     }
 
     private static func isFoldableScreen(_ scene: UIWindowScene?) -> Bool {
-        guard let b = scene?.screen.bounds else { return false }
+        guard DuoScreen.isIPhoneHardware, let b = scene?.screen.bounds else { return false }
         return max(b.width, b.height) / max(1, min(b.width, b.height)) < 1.6
     }
 

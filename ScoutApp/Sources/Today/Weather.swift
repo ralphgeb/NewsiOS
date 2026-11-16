@@ -455,13 +455,31 @@ struct WeatherCard: View {
                 HourStrip(hours: Array(r.hours.prefix(13)))
                     .transition(.opacity)
             }
-            // Apple Weather's credit and data sources are in Settings › On Today.
+            // Apple Weather's credit, with the forecast as Apple asks
+            if !compact { WeatherCredit() }
             if weather.isDenied {
                 Text("Location is off, so this is London. Change it in the Settings app.")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.tertiary)
             }
         }
+    }
+}
+
+/// Apple Weather's mark and its data sources, shown with the forecast (WeatherKit's attribution
+/// rules); the Open-Meteo stand-in is credited the same way when it was used.
+struct WeatherCredit: View {
+    @State private var sources: URL?
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("\u{F8FF} Weather").font(.system(size: 11, weight: .semibold))
+            if let sources {
+                Link("Data sources", destination: sources).font(.system(size: 11, weight: .medium))
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Theme.tertiary)
+        .task { sources = try? await WeatherService.shared.attribution.legalPageURL }
     }
 }
 

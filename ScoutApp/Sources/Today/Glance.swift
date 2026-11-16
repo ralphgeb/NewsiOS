@@ -53,6 +53,8 @@ struct GlanceCard: View {
                         }
                         .foregroundStyle(Theme.text)
                         TubeCard(embedded: true)
+                        Text("Line status from \(tube.city.source) open data")
+                            .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.tertiary)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -198,6 +200,7 @@ struct GlanceCard: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(.snappy) { showRain.toggle() } }
+            WeatherCredit()
             if weather.isDenied {
                 Text("Location is off, so this is London. Change it in the Settings app.")
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.tertiary)

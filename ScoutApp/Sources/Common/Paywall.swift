@@ -20,7 +20,13 @@ enum Plus {
 
     /// TestFlight only: act as if there's no Scout Plus, to try what's free and what's paid.
     static let testFreeKey = "plus.testAsFree"
+    /// App Review tests with a sandbox receipt too, so the build sent for review (archived with
+    /// APP_STORE) never shows the TestFlight tools, whatever the receipt says.
+    #if APP_STORE
+    static let isTestFlight = false
+    #else
     static var isTestFlight: Bool { Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" }
+    #endif
 
     /// The widgets can't read the app's own settings, so Plus is copied into the App Group.
     static let sharedKey = "plus.active"
@@ -61,7 +67,8 @@ final class PlusStore: ObservableObject {
     /// UK and US prices are both 0.99, so there it's shown in your currency.
     var price: String {
         guard let product else { return Plus.price }
-        if let local = Locale.current.currency?.identifier, ["GBP", "USD"].contains(local),
+        // the App Store build always shows exactly what Apple will charge
+        if Plus.isTestFlight, let local = Locale.current.currency?.identifier, ["GBP", "USD"].contains(local),
            product.priceFormatStyle.currencyCode != local {
             return product.price.formatted(.currency(code: local))
         }
@@ -79,7 +86,7 @@ final class PlusStore: ObservableObject {
             if case .verified(let t) = result, t.productID == Self.productID, t.revocationDate == nil { active = true }
         }
         let d = UserDefaults.standard
-        if d.bool(forKey: Plus.testFreeKey) { active = false }
+        if Plus.isTestFlight, d.bool(forKey: Plus.testFreeKey) { active = false }
         defer { Plus.share() }
         if active {
             if !d.bool(forKey: Plus.key) { d.set(Date.now.timeIntervalSince1970, forKey: Plus.sinceKey) }
@@ -171,6 +178,7 @@ struct PlusSheet: View {
     /// The sheet is as tall as what's in it, measured as it draws.
     @State private var height: CGFloat = 430
     @State private var unavailable = false
+    @State private var restoreNote: String?
 
     var body: some View {
         VStack(spacing: 14) {
@@ -238,12 +246,21 @@ struct PlusSheet: View {
                         .font(.system(size: 11)).foregroundStyle(Theme.tertiary)
                         .multilineTextAlignment(.center)
                     HStack(spacing: 14) {
-                        Button("Restore purchases") { Task { await plus.restore(); if Plus.isActive { dismiss() } } }
+                        Button("Restore purchases") {
+                            Task {
+                                await plus.restore()
+                                if Plus.isActive { dismiss() } else { restoreNote = "No active Scout Plus subscription was found for this Apple account." }
+                            }
+                        }
                         Link("Terms", destination: Plus.termsURL)
                         Link("Privacy", destination: Plus.privacyURL)
                     }
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.secondary)
+                    if let restoreNote {
+                        Text(restoreNote).font(.system(size: 12)).foregroundStyle(Theme.accent)
+                            .multilineTextAlignment(.center)
+                    }
                 }
                 .padding(.top, 14)   // a little air between the perks and the button
                 .transition(.opacity)

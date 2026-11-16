@@ -4,6 +4,11 @@ name: Scout – upload to TestFlight
 # Once a run succeeds you can add a `push:` trigger for the main branch.
 on:
   workflow_dispatch:
+    inputs:
+      store:
+        description: "Build for App Store review (no TestFlight tools in Settings)"
+        type: boolean
+        default: false
 
 # One run at a time: each run clears the signing certificates CI made, so two at once would clash.
 concurrency:
@@ -91,6 +96,7 @@ jobs:
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Automatic \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            OTHER_SWIFT_FLAGS='$(inherited) ${{ inputs.store && '-DAPP_STORE' || '' }}' \
             2>&1 | tee build/archive.log || {
               # Show the real reasons as red annotations at the top of the run page
               grep -E -A2 "error:|ARCHIVE FAILED|No profiles|requires a provisioning|Provisioning profile|No Accounts|not registered" build/archive.log \
