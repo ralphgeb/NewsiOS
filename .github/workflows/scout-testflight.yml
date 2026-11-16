@@ -66,8 +66,22 @@ jobs:
       - name: Select the newest released Xcode 
         run: |
           echo "Installed Xcodes:"; ls -d /Applications/Xcode*.app
-          best=$(ls -d /Applications/Xcode_*.app 2>/dev/null | grep -viE "beta|rc|preview" | sort -V | tail -1)
-          if [ -n "$best" ]; then sudo xcode-select -s "$best/Contents/Developer"; fi
+          # App Store Connect only accepts builds from released (GM) Xcode. A folder's name can hide a
+          # beta (Xcode_27.3.app pointing at Xcode_27.3_beta.app), so judge each by its own build
+          # number: released builds end in a digit (27B74); betas end in a letter (27C5020n).
+          best=""; bestv=0
+          for x in /Applications/Xcode*.app; do
+            real=$(cd "$x" 2>/dev/null && pwd -P) || continue
+            case "$real" in *[Bb]eta*|*RC*|*[Pp]review*) continue;; esac
+            out=$(DEVELOPER_DIR="$real/Contents/Developer" xcodebuild -version 2>/dev/null) || continue
+            v=$(echo "$out" | awk 'NR==1{print $2}'); b=$(echo "$out" | awk '/Build version/{print $3}')
+            [[ "$b" =~ [0-9]$ ]] || { echo "skip $x ($v $b: beta)"; continue; }
+            n=$(echo "$v" | awk -F. '{printf "%d%03d%03d", $1, $2, $3}')
+            echo "released: $x -> $real ($v $b)"
+            if [ "$n" -gt "$bestv" ]; then best=$real; bestv=$n; fi
+          done
+          [ -n "$best" ] || { echo "::error::No released Xcode found on this runner"; exit 1; }
+          sudo xcode-select -s "$best/Contents/Developer"
           xcodebuild -version; swift --version
           echo "::notice::Using $(xcodebuild -version | head -1) / $(swift --version 2>&1 | head -1)"
 
