@@ -1,7 +1,7 @@
 name: Scout – simulator build for Appetize
 
-# Builds Scout for the iOS Simulator with everything unlocked (no Scout Plus paywall; Apple silicon
-# publishes it as the ios-simulator-latest release, a direct download:
+# Builds Scout for the iOS Simulator (Apple silicon and Intel) with everything unlocked (no
+# Scout Plus paywall), zips it as Appetize.io expects and publishes it as the ios-simulator-latest release, a direct download:
 #   https://github.com/ralphgeb/NewsiOS/releases/download/ios-simulator-latest/Scout-simulator.zip
 # If the APPETIZE_API_TOKEN secret is set, it also uploads it to Appetize (updating the same app
 # once the APPETIZE_APP_KEY variable holds its public key) and prints the link. Started by hand.
