@@ -1,6 +1,6 @@
 name: Scout – simulator build for Appetize
 
-# Builds Scout for the iOS Simulator (Apple silicon and Intel), zips it as Appetize.io expects and
+# Builds Scout for the iOS Simulator with everything unlocked (no Scout Plus paywall; Apple silicon
 # publishes it as the ios-simulator-latest release, a direct download:
 #   https://github.com/ralphgeb/NewsiOS/releases/download/ios-simulator-latest/Scout-simulator.zip
 # If the APPETIZE_API_TOKEN secret is set, it also uploads it to Appetize (updating the same app
@@ -48,6 +48,7 @@ jobs:
             -derivedDataPath build \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
+            OTHER_SWIFT_FLAGS='$(inherited) -DDEMO_UNLOCKED' \
             2>&1 | tee build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log || { grep -E "error:" build.log | sort -u | head -40; exit 1; }
 

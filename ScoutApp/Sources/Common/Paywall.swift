@@ -18,6 +18,14 @@ enum Plus {
 
     static var isActive: Bool { UserDefaults.standard.bool(forKey: key) }
 
+    /// The Appetize preview build (archived with DEMO_UNLOCKED): everything open, no paywall.
+    /// Never in a TestFlight or App Store build.
+    #if DEMO_UNLOCKED
+    static let demoUnlocked = true
+    #else
+    static let demoUnlocked = false
+    #endif
+
     /// TestFlight only: act as if there's no Scout Plus, to try what's free and what's paid.
     static let testFreeKey = "plus.testAsFree"
     /// App Review tests with a sandbox receipt too, so the build sent for review (archived with
@@ -87,6 +95,7 @@ final class PlusStore: ObservableObject {
         }
         let d = UserDefaults.standard
         if Plus.isTestFlight, d.bool(forKey: Plus.testFreeKey) { active = false }
+        if Plus.demoUnlocked { active = true }
         defer { Plus.share() }
         if active {
             if !d.bool(forKey: Plus.key) { d.set(Date.now.timeIntervalSince1970, forKey: Plus.sinceKey) }

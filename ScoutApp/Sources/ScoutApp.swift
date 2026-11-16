@@ -16,6 +16,8 @@ struct ScoutApp: App {
     private static let refreshID = "com.ralphgeb.scout.refresh"
 
     init() {
+        // the Appetize preview build: Scout Plus on from the first launch
+        if Plus.demoUnlocked { UserDefaults.standard.set(true, forKey: Plus.key) }
         // listens for App Store transactions (Scout Plus) from launch
         _ = PlusStore.shared
         // iOS wakes the app in the background now and then; each time Scout checks for a new
