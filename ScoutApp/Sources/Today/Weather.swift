@@ -210,8 +210,9 @@ final class WeatherModel: NSObject, ObservableObject {
     private static func openMeteo(_ spot: CLLocation, place: String) async throws -> Report {
         var c = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         c.queryItems = [
-            .init(name: "latitude", value: String(format: "%.3f", spot.coordinate.latitude)),
-            .init(name: "longitude", value: String(format: "%.3f", spot.coordinate.longitude)),
+            // rounded to about 1 km, as the privacy policy says
+            .init(name: "latitude", value: String(format: "%.2f", spot.coordinate.latitude)),
+            .init(name: "longitude", value: String(format: "%.2f", spot.coordinate.longitude)),
             .init(name: "current", value: "temperature_2m,weather_code,is_day"),
             .init(name: "hourly", value: "temperature_2m,weather_code,is_day,precipitation_probability"),
             .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,precipitation_probability_max"),
