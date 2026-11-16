@@ -177,6 +177,9 @@ struct RootView: View {
                 .frame(width: g.size.width, height: g.size.height)
                 // folded or opened: only the big screen turns sideways
                 .onChange(of: inner, initial: true) { _, _ in DuoOrientation.refresh() }
+                // the screen in use changed (folded or opened): face the way the phone is held
+                .onReceive(NotificationCenter.default.publisher(for: UIScreen.modeDidChangeNotification)) { _ in DuoOrientation.refresh() }
+                .onReceive(NotificationCenter.default.publisher(for: UIScene.didActivateNotification)) { _ in DuoOrientation.refresh() }
         }
     }
 

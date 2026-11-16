@@ -215,11 +215,41 @@ enum DuoOrientation {
         return max(b.width, b.height) / max(1, min(b.width, b.height)) < 1.6
     }
 
-    /// Asks iOS to look again after the screen changes (folded or opened).
+    /// Asks iOS to look again after the screen changes (folded or opened), and turns Scout to the
+    /// way the phone is actually held. iOS only rotates an app when the phone moves, so without
+    /// this, opening the Duo while holding it sideways would leave Scout upright until the phone
+    /// was turned. Run again a moment later too, as the new screen settles.
     @MainActor static func refresh() {
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        apply()
+        for delay in [0.35, 1.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { apply() }
+        }
+    }
+
+    @MainActor private static func apply() {
         for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
             scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            if mask(scene) == .portrait { scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in } }
+            let allowed = mask(scene)
+            if allowed == .portrait {
+                if scene.effectiveGeometry.interfaceOrientation != .portrait {
+                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
+                }
+            } else if let held = heldOrientation(), scene.effectiveGeometry.interfaceOrientation != held.orientation {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: held.mask)) { _ in }
+            }
+        }
+    }
+
+    /// How the phone is held, as the screen should face (the screen turns the other way to the
+    /// phone: phone landscape-left means screen landscape-right). Nil when flat on a table.
+    @MainActor private static func heldOrientation() -> (orientation: UIInterfaceOrientation, mask: UIInterfaceOrientationMask)? {
+        switch UIDevice.current.orientation {
+        case .portrait: return (.portrait, .portrait)
+        case .portraitUpsideDown: return (.portraitUpsideDown, .portraitUpsideDown)
+        case .landscapeLeft: return (.landscapeRight, .landscapeRight)
+        case .landscapeRight: return (.landscapeLeft, .landscapeLeft)
+        default: return nil
         }
     }
 }
