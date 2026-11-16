@@ -153,7 +153,7 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Theme.card)
                 Section("How Scout works") {
-                    explainer("Briefings", "Every morning by 6:00 UK time, Scout reads about 180 news sites from the US, the UK, Europe and Asia, and AI writes a briefing for Tech, Finance, World and Fashion: what happened, why it matters and what to watch. Pull any page down to refresh.")
+                    explainer("Briefings", "Twice a day, by 6:00 and by 16:30 UK time, Scout reads about 180 news sites from the US, the UK, Europe and Asia, and AI writes a briefing for Tech, Finance, World and Fashion: what happened, why it matters and what to watch. Pull any page down to refresh.")
                     explainer("For you", "Today's front page: stories on your topics, ranked by how big they are (an AI score and market impact), how many outlets cover them and how recent they are, with the day's biggest stories mixed in and no more than three in a row on one topic.")
                     explainer("Sections", "Tech, Finance, World and Fashion run newest first, with the stories on your topics and from the places you follow moved up, a mix of outlets and regions at the top, and nothing hidden.")
                     explainer("Listening", "With Scout Plus every briefing is read aloud, and Play my briefings on Today plays them one after another. Any story can be played too: the first time anyone plays it, it's recorded in a few seconds and kept for everyone.")
